@@ -6,7 +6,7 @@
 
 > 🃏 Three B-tier models gang up and out-argue the one A-tier star.
 > A Claude Code skill that turns a panel of models into one judged answer — plus a workflow toolkit that
-> plans, gathers context, splits tasks, and hands off.
+> plans, investigates, gathers context, splits, optimizes, refactors, and hands off.
 
 ![Claude Code Skill](https://img.shields.io/badge/Claude%20Code-Skill-8A63D2)
 ![License: MIT](https://img.shields.io/badge/License-MIT-3da639.svg)
@@ -86,6 +86,10 @@ findings list, must‑fix first. For the calls where being confidently wrong is 
 - 🤝 **`/fusion-handoff <work>`** → a clean handoff note (done / verified / risks / next steps) so the next
   agent — or future‑you — picks up in seconds.
 
+**Power-user modes:** `/fusion-plan --deep` (a polished design doc with a critique pass) · `/fusion-context
+--discover` (let an agent curate the pack, evidence-gated) · `/fusion-orchestrate --worktrees` (isolate
+parallel siblings in their own git worktrees). All opt-in; the plain commands stay simple.
+
 Chain them and you go from a vague one‑liner to a verified, shipped change:
 
 ```text
@@ -136,7 +140,8 @@ bash ~/.claude/skills/fusion-deck/scripts/smoke_test.sh     # offline self-check
 - **Where the savings come from.** It reuses the subscriptions you're already logged into (Claude /
   `codex` / `gemini`) — no per‑token API bill the way OpenRouter's Fusion API charges. *You just need the
   three subscriptions.* The full panel costs more quota and runs as slow as its slowest model, so only
-  `/fusion` and `/fusion-review` open the whole table by default; the rest are fast single‑model commands.
+  `/fusion` and `/fusion-review` open the whole table by default, `/fusion-investigate` and
+  `/fusion-optimize` call it only at their decision points, and the rest are fast single‑model commands.
 - **Nothing is faked.** Every panel answer states which models actually answered; a smaller panel is never
   dressed up as the full one.
 - **No secrets in the repo.** Auth lives in the CLIs; nothing private is hardcoded.
@@ -150,7 +155,7 @@ bash ~/.claude/skills/fusion-deck/scripts/smoke_test.sh     # offline self-check
 ## 简体中文
 
 > 🃏 三个臭皮匠合起来，比那个独苗状元还能打——这回状元叫 Fable。
-> 一个 Claude Code 技能：把一桌模型拧成一个被评审过的答案，外加一套会规划、会备上下文、会拆活、会交接的工作流。
+> 一个 Claude Code 技能：把一桌模型拧成一个被评审过的答案，外加一套会规划、会查根因、会备上下文、会拆活、会调优、会重构、会交接的工作流。
 
 [English](#fusion-deck) · **简体中文**
 
@@ -207,6 +212,8 @@ OpenRouter 的 **DRACO** 深度研究基准 —— 10 个领域、100 道题：
 - ♻️ **`/fusion-refactor <目标>`** → 结构分析 → 保行为的计划 → 一个被引导的 agent 落地。代码更干净、行为不变（靠一直绿的测试证明）。
 - 🤝 **`/fusion-handoff <工作>`** → 一份干净的交接（做了啥 / 验了啥 / 有啥风险 / 下一步），下一个 agent —— 或者明天的你 —— 接手秒上手。
 
+**进阶用法：** `/fusion-plan --deep`（出正式设计文档 + 批判 pass）· `/fusion-context --discover`（让 agent 带证据门控地自己挑文件）· `/fusion-orchestrate --worktrees`（并行任务各跑在独立 git worktree 里）。都是可选的，普通命令照样简单。
+
 串起来用，一句模糊需求就能走到一个验证过、能交付的改动：
 
 ```text
@@ -252,7 +259,7 @@ bash ~/.claude/skills/fusion-deck/scripts/smoke_test.sh     # 本地自检（不
 
 ### 几点说明
 
-- **省钱省在哪。** 它复用你电脑里已经登录的订阅（Claude / `codex` / `gemini`），不像 OpenRouter Fusion 那样按 token 收 API 费 —— **前提是你有这三家的订阅。** 整桌一起上更费额度、也得等最慢的那个，所以默认只有 `/fusion` 和 `/fusion-review` 才开整桌；其余命令走单模型，图个快。
+- **省钱省在哪。** 它复用你电脑里已经登录的订阅（Claude / `codex` / `gemini`），不像 OpenRouter Fusion 那样按 token 收 API 费 —— **前提是你有这三家的订阅。** 整桌一起上更费额度、也得等最慢的那个，所以默认只有 `/fusion` 和 `/fusion-review` 开整桌，`/fusion-investigate` 和 `/fusion-optimize` 只在决策点上才开，其余命令走单模型，图个快。
 - **不糊弄。** 每个面板答案都会写明这回到底是哪几个模型回答的；小阵容绝不冒充满配。
 - **仓库里不放密钥。** 登录的事交给各家 CLI，绝不往代码里塞私密信息。
 
