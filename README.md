@@ -1,7 +1,8 @@
 # fusion-deck
 
-> One question → a panel of the best models → one judged answer.
-> Plus a small toolkit to plan, gather context, orchestrate, and hand off — all inside Claude Code.
+> 🃏 Three B-tier models gang up and out-argue the one A-tier star.
+> A Claude Code skill that turns a panel of models into one judged answer — plus a workflow toolkit that
+> plans, gathers context, splits tasks, and hands off.
 
 ![Claude Code Skill](https://img.shields.io/badge/Claude%20Code-Skill-8A63D2)
 ![License: MIT](https://img.shields.io/badge/License-MIT-3da639.svg)
@@ -10,66 +11,69 @@
 
 ---
 
-## What it is
+## The story
 
-**fusion-deck** is a [Claude Code](https://claude.com/claude-code) skill. Its headline trick: instead of
-asking one model, it asks **three top models the same question at the same time** — Claude Opus 4.8,
-GPT‑5.5, and Gemini 3.1 Pro — each answering independently. Then **Opus 4.8 reads all three, cross‑checks
-them, and writes the single best answer**. On the calls that actually matter, you get far fewer
-confident‑but‑wrong answers.
+OpenRouter published a fun result: a **panel of models, judged by one of them, beats the best single
+frontier model** (“Fusion beats frontier”). Two snags with just using theirs:
 
-It also ships five companion commands for real work: turn a vague idea into a checkable plan, package
-just‑the‑right context, run a task as verified sub‑steps, and write a clean handoff.
+1. The single strongest model in that test — **Claude Fable 5 — is off the table for me. I can't run it.**
+2. OpenRouter's Fusion is a **metered API**: every call costs.
 
-## Why it works (it's measured)
+So fusion-deck does the same trick, **on your own machine**: it rounds up **three models you already pay a
+flat subscription for** — Claude Opus 4.8, GPT‑5.5 (via the `codex` CLI), and Gemini 3.1 Pro (via the
+`gemini` CLI) — has Opus 4.8 judge them, and **beats the lone star anyway**. No extra per‑token API meter:
+it just rides the CLIs you're already logged into. Three cobblers, one Zhuge Liang. 🧠
 
-Asking one model — even a frontier one — leaves accuracy on the table. On OpenRouter's **DRACO**
-deep‑research benchmark (100 tasks across 10 domains), running a **panel judged by Opus 4.8** beat *every
-single model tested*:
+> **The catch:** the full panel needs all three subscriptions/CLIs. Missing one? No drama — it runs with
+> whatever you've got and always tells you exactly which models answered.
 
-| Setup | DRACO score |
+## The proof
+
+OpenRouter's **DRACO** deep‑research benchmark — 100 tasks across 10 domains:
+
+| Setup | DRACO |
 | --- | --- |
-| **fusion-deck's default panel** — Opus 4.8 + GPT‑5.5 + Gemini 3.1 Pro, judged by Opus 4.8 | **68.3%** |
+| 🃏 **fusion-deck's panel** — Opus 4.8 + GPT‑5.5 + Gemini 3.1 Pro, judged by Opus 4.8 | **68.3%** |
 | Opus 4.8 + GPT‑5.5, judged by Opus 4.8 | 67.6% |
-| Claude Fable 5 — best single model, solo | 65.3% |
+| 🌟 Claude Fable 5 — the lone star, solo | 65.3% |
 | GPT‑5.5, solo | 60.0% |
 | Opus 4.8, solo | 58.8% |
 
-fusion-deck runs that exact panel by default — **68.3%, a +3.0‑point edge over the best single model
-(Fable 5 at 65.3%)** and ~+9.5 over Opus 4.8 alone. Even two cold runs of the *same* model, judged
-together, jump +6.7 points over a single run — because independent attempts take different reasoning
-paths and catch each other's mistakes. That's the whole idea, and it's why the gains are real rather than
-luck.
+The three underdogs land **68.3% — that's +3.0 over the star (Fable 5) and ~+9.5 over Opus 4.8 on its
+own.** Three independent tries catch each other's mistakes; even the *same* model run twice and judged
+jumps +6.7. Not luck — that's the whole point.
 
-*Benchmark data: OpenRouter, “[Fusion beats frontier](https://openrouter.ai/blog/announcements/fusion-beats-frontier/).”
-fusion-deck runs the same panel locally through the Claude / `codex` / `gemini` CLIs — there's no router in
-between, and nothing is sent through a third party.*
+*Data: OpenRouter, “[Fusion beats frontier](https://openrouter.ai/blog/announcements/fusion-beats-frontier/).”
+fusion-deck runs the same panel locally via the Claude / `codex` / `gemini` CLIs — no router, nothing
+leaves for a third party.*
 
-## Commands
+## Two superpowers
 
-| Command | What it does | Use it when |
-| --- | --- | --- |
-| `/fusion <question>` | Asks 3 top models in parallel; Opus 4.8 judges them and writes one answer. | A high‑stakes question, design call, or nasty bug where being wrong is costly. |
-| `/fusion-review <code or diff>` | 3 models review independently; you get one prioritized findings list (must‑fix first). | Before merging a PR or committing to a design. |
-| `/fusion-plan <vague idea>` | Turns a fuzzy ask into a clear plan: goal, “done when…”, steps, risks. | Starting from an unclear request. |
-| `/fusion-context <task>` | Bundles only the relevant files into one tidy, size‑budgeted context pack. | Briefing another model/agent without dumping the whole repo. |
-| `/fusion-orchestrate <task>` | Splits the work, runs each piece in a focused sub‑agent, verifies each before the next. | Multi‑step changes you want done carefully. |
-| `/fusion-handoff <work>` | Writes a clean handoff note: what’s done, what’s verified, risks, next steps. | Wrapping up, or before a context reset. |
+**① Think hard — open the panel.**
+`/fusion <question>` and `/fusion-review <code or diff>` fan your question (or your code) out to the panel,
+blind and in parallel, then Opus 4.8 judges it into **one cross‑checked answer** — or one prioritized
+findings list, must‑fix first. For the calls where being confidently wrong is expensive.
 
-## What's built in to understand you better
+**② Work smart — run the workflow.** This is the part people sleep on:
 
-- **Independent, blind answers — no echo chamber.** Panelists never see each other's work, so you get
-  genuinely different angles, not three models nodding along with the first one.
-- **A judge, not a vote.** Opus 4.8 reads every answer, separates consensus from contradiction, keeps the
-  point only one model caught, and writes one grounded answer — it doesn't just average them.
-- **The right context, not the whole repo.** `/fusion-context` packs only the files that matter, on a
-  token budget, so the model reasons about your actual code instead of drowning in noise.
-- **Your fuzzy ask becomes an explicit contract.** `/fusion-plan` pins the goal and a concrete “done‑when”
-  before any code — so you get what you meant, not a confident guess.
-- **Every step is verified.** `/fusion-orchestrate` checks each sub‑task against its “done‑when” before
-  starting the next, so the work doesn't quietly drift off course.
-- **Always honest about the panel.** It tells you exactly which models answered; a smaller panel is never
-  dressed up as the full one.
+- 🧩 **`/fusion-plan <one fuzzy line>`** → a real plan: the goal, a concrete “done‑when”, the steps, the
+  risks. Stop hand‑holding the AI through vague asks — pin down what you actually meant first.
+- 📦 **`/fusion-context <task>`** → a tidy, **token‑budgeted context pack of only the files that matter**.
+  The model finally reasons about your real code instead of drowning in the whole repo.
+- 🔀 **`/fusion-orchestrate <task>`** → **splits the work into pieces, runs each in a focused sub‑agent, and
+  verifies each one before starting the next.** Big changes done carefully — not one hopeful mega‑prompt.
+- 🤝 **`/fusion-handoff <work>`** → a clean handoff note (done / verified / risks / next steps) so the next
+  agent — or future‑you — picks up in seconds.
+
+Chain them and you go from a vague one‑liner to a verified, shipped change:
+
+```text
+fuzzy idea → /fusion-plan → /fusion-context → /fusion-orchestrate → /fusion-handoff
+```
+
+Under the hood it's tuned to actually *get* you: panelists answer **blind** (no echo chamber), the judge
+**reconciles** consensus vs. contradictions (it doesn't average), context is **curated not dumped**, and
+every step is **verified before the next**.
 
 ## Install
 
@@ -78,15 +82,12 @@ git clone https://github.com/raydocs/fusion-deck.git
 bash fusion-deck/install.sh
 ```
 
-Then run **`/reload-skills`** in Claude Code (or restart). Done — `/fusion`, `/fusion-review`, … are ready.
+Then run **`/reload-skills`** in Claude Code (or restart). Done — `/fusion`, `/fusion-plan`, … are ready.
 
-**For the full 3‑model panel**, install the two optional CLIs:
+**For the full 3‑model panel**, install the two optional CLIs (and be logged into each):
 
 - [`codex`](https://developers.openai.com/codex) — adds the GPT‑5.5 panelist
 - [`gemini`](https://github.com/google-gemini/gemini-cli) — adds the Gemini 3.1 Pro panelist
-
-No CLIs? fusion-deck still works with fewer models — and it **always tells you which panel it actually
-used**. It never pretends.
 
 Check anytime:
 
@@ -101,15 +102,19 @@ bash ~/.claude/skills/fusion-deck/scripts/smoke_test.sh     # offline self-check
 /fusion Should we use optimistic or pessimistic locking for the booking flow? Trade-offs at our scale.
 /fusion-review git diff main...HEAD
 /fusion-plan add a /health endpoint with a test
+/fusion-context the checkout flow, so I can hand it to another agent
 /fusion-orchestrate docs/plans/add-health.md
 /fusion-handoff the auth refactor
 ```
 
 ## Good to know
 
-- **Cost & panel are transparent.** The 3‑model panel costs more tokens and runs as slow as its slowest
-  model, so only `/fusion` and `/fusion-review` use it by default; the rest are fast single‑model commands.
-- **Nothing is faked.** Every panel answer states which models actually answered.
+- **Where the savings come from.** It reuses the subscriptions you're already logged into (Claude /
+  `codex` / `gemini`) — no per‑token API bill the way OpenRouter's Fusion API charges. *You just need the
+  three subscriptions.* The full panel costs more quota and runs as slow as its slowest model, so only
+  `/fusion` and `/fusion-review` open the whole table by default; the rest are fast single‑model commands.
+- **Nothing is faked.** Every panel answer states which models actually answered; a smaller panel is never
+  dressed up as the full one.
 - **No secrets in the repo.** Auth lives in the CLIs; nothing private is hardcoded.
 
 ## License
@@ -120,52 +125,57 @@ bash ~/.claude/skills/fusion-deck/scripts/smoke_test.sh     # offline self-check
 
 ## 简体中文
 
-> 一个难题，甩给一桌顶尖模型同时作答，再让 Opus 4.8 拍板给你一个靠谱答案。
-> 顺手还帮你把需求理成计划、把上下文备好、把活拆开、把交接写清——全在 Claude Code 里。
+> 🃏 三个臭皮匠合起来，比那个独苗状元还能打——这回状元叫 Fable。
+> 一个 Claude Code 技能：把一桌模型拧成一个被评审过的答案，外加一套会规划、会备上下文、会拆活、会交接的工作流。
 
 [English](#fusion-deck) · **简体中文**
 
-### 这是什么
+### 来历
 
-**fusion-deck** 是一个 [Claude Code](https://claude.com/claude-code) 技能。一句话说清它最值钱的那招：**别再只问一个模型了。** 同一个难题，它会同时丢给三个顶尖模型——Claude Opus 4.8、GPT‑5.5、Gemini 3.1 Pro——让它们各答各的、互不通气；然后 Opus 4.8 把三份答案一起读完、互相对照、挑出彼此的毛病，最后写一份它觉得最靠得住的给你。越是要紧的判断，越能帮你躲开那种「听着特别有道理、其实是错的」坑。
+OpenRouter 发了个挺好玩的结论：**一桌模型 + 其中一个当评审，分数能压过最强的单个前沿模型**（《Fusion beats frontier》）。但直接用他们的有俩坎：
 
-光会答还不够，它还带了五个干活的命令：把一句模糊需求理成能验收的计划、把该看的文件打包成刚好够用的上下文、把大活拆成一步步能验证的小任务、最后再替你把交接写好。
+1. 那场里最能打的单模型 —— **Claude Fable 5，我这儿根本用不了，被封了。**
+2. OpenRouter 的 Fusion 是 **按量计费的 API**：一调一掏钱。
 
-### 为什么有用（有实测）
+所以 fusion-deck 把这套搬到**你自己电脑上**：拉上**三个你本来就按月订阅、早就登录好的模型** —— Claude Opus 4.8、GPT‑5.5（走 `codex`）、Gemini 3.1 Pro（走 `gemini`）—— 让 Opus 4.8 当评审，**照样把那个单飞的状元比下去**。不额外按 token 收费，直接复用你已经登录的订阅。三个臭皮匠，顶个诸葛亮。🧠
 
-只问一个模型——哪怕是最强的那个——也是在白白浪费准确率。在 OpenRouter 的 **DRACO** 深度研究基准（10 个领域、100 道题）上，「开一桌模型 + 让 Opus 4.8 当评审」这套打法，分数压过了**所有参测的单个模型**：
+> **小前提：** 想凑齐整桌，你得有这三家的订阅 / CLI。少一个也不耽误 —— 它会用现有的接着跑，而且每次都老老实实告诉你这回到底上了谁。
 
-| 配置 | DRACO 得分 |
+### 实测
+
+OpenRouter 的 **DRACO** 深度研究基准 —— 10 个领域、100 道题：
+
+| 配置 | DRACO |
 | --- | --- |
-| **fusion-deck 默认阵容** —— Opus 4.8 + GPT‑5.5 + Gemini 3.1 Pro，Opus 4.8 评审 | **68.3%** |
+| 🃏 **fusion-deck 的阵容** —— Opus 4.8 + GPT‑5.5 + Gemini 3.1 Pro，Opus 4.8 评审 | **68.3%** |
 | Opus 4.8 + GPT‑5.5，Opus 4.8 评审 | 67.6% |
-| Claude Fable 5 —— 最强单模型，单飞 | 65.3% |
+| 🌟 Claude Fable 5 —— 独苗状元，单飞 | 65.3% |
 | GPT‑5.5，单飞 | 60.0% |
 | Opus 4.8，单飞 | 58.8% |
 
-fusion-deck 默认跑的就是这套阵容——**68.3%，比最强的单模型（Fable 5，65.3%）还高 3.0 分**，比 Opus 4.8 单飞高出将近 9.5 分。哪怕是同一个模型冷跑两遍再合并，也能比单跑高 6.7 分——因为各自独立的尝试会走出不同的思路，互相把对方的错挑出来。这就是整件事的核心，也是为什么这点提升是真本事、不是运气。
+三个臭皮匠落在 **68.3% —— 比状元 Fable 5（65.3%）高 3.0 分**，比 Opus 4.8 单飞高了将近 9.5 分。三次各自独立的尝试会互相挑错；哪怕同一个模型跑两遍再合并，也能高 6.7 分。不是运气，这就是整件事的核心。
 
-*基准数据来自 OpenRouter 的《[Fusion beats frontier](https://openrouter.ai/blog/announcements/fusion-beats-frontier/)》（DRACO 基准）。fusion-deck 是用你本机的 Claude / `codex` / `gemini` 直接跑同一套阵容——中间不经过任何 router，也不会把东西发给第三方。*
+*数据来自 OpenRouter 的《[Fusion beats frontier](https://openrouter.ai/blog/announcements/fusion-beats-frontier/)》（DRACO 基准）。fusion-deck 是用你本机的 Claude / `codex` / `gemini` 直接跑同一套阵容 —— 不经过任何 router，也不往第三方发东西。*
 
-### 命令清单
+### 两样看家本领
 
-| 命令 | 干什么 | 什么时候用 |
-| --- | --- | --- |
-| `/fusion <问题>` | 三个顶尖模型同时开答，Opus 4.8 当评委、综合出一个答案 | 拿不准的关键问题、架构选型、难缠的 bug——答错很贵的时候 |
-| `/fusion-review <代码 / diff>` | 三个模型各看各的，汇成一份排好优先级的问题清单（必须改的排最前） | 合 PR 前、方案定稿前 |
-| `/fusion-plan <模糊需求>` | 把一句话需求变成清楚的计划：目标、怎样算做完、分几步、有哪些坑 | 需求还没想明白就得动手时 |
-| `/fusion-context <任务>` | 只挑相关的文件，打包成一份干净、控制了大小的上下文 | 要把活交给另一个模型 / agent，又不想把整个仓库砸过去 |
-| `/fusion-orchestrate <任务>` | 把活拆开，每块交给一个专注的子 agent，做完一块先验过再做下一块 | 多步骤改动想稳着来、别一锅乱炖 |
-| `/fusion-handoff <工作>` | 写一份干净的交接：做了啥、验了啥、有啥风险、接下来该干啥 | 收尾，或者上下文快被清空之前 |
+**① 想得狠 —— 开一桌。**
+`/fusion <问题>`、`/fusion-review <代码 / diff>`：把问题（或代码）甩给一桌模型，各自盲答、并行跑，再由 Opus 4.8 评审成**一个交叉核对过的答案** —— 或者一份排好优先级、必改的排最前的问题清单。专治"答错了很贵"的场合。
 
-### 内置的几样优化（让它更懂你）
+**② 干得巧 —— 跑工作流。** 这部分最容易被低估：
 
-- **各答各的、互不通气——不搞回声室。** 几个模型彼此看不到对方的答案，给你的是真不一样的视角，而不是仨模型一起附和第一个。
-- **是评审，不是投票。** Opus 4.8 把每份答案都读一遍，分清哪些是共识、哪些是冲突，把只有一个模型发现的点也留下，最后写一个有依据的答案——不是简单求个平均。
-- **只给该看的上下文，不是整个仓库。** `/fusion-context` 只挑相关文件、还卡着 token 预算打包，让模型对着你真正的代码思考，而不是被一堆噪音淹没。
-- **把你那句模糊需求，变成白纸黑字的契约。** `/fusion-plan` 先把目标和「怎样算做完」钉死、再动代码——你要的就是你得到的，而不是它自信地猜。
-- **每一步都验过再走。** `/fusion-orchestrate` 做完一个子任务、对照「完成标准」验过，才开下一个，活儿不会悄悄跑偏。
-- **阵容永远透明。** 它会明确告诉你这次是哪几个模型回答的；小阵容绝不会被包装成满配。
+- 🧩 **`/fusion-plan <一句模糊的话>`** → 一份真计划：目标、怎样算做完、分几步、有哪些坑。别再手把手哄着 AI 猜你想要啥 —— 先把你真正的意思钉死。
+- 📦 **`/fusion-context <任务>`** → 一份卡着 token 预算、**只装该看的文件**的上下文包。让模型对着你真正的代码动脑子，而不是被整个仓库淹死。
+- 🔀 **`/fusion-orchestrate <任务>`** → **把活拆成小块，每块交给一个专注的子 agent，做完一块先验过再开下一块。** 大改动也能稳稳落地，而不是赌一个超长 prompt 一把梭。
+- 🤝 **`/fusion-handoff <工作>`** → 一份干净的交接（做了啥 / 验了啥 / 有啥风险 / 下一步），下一个 agent —— 或者明天的你 —— 接手秒上手。
+
+串起来用，一句模糊需求就能走到一个验证过、能交付的改动：
+
+```text
+模糊想法 → /fusion-plan → /fusion-context → /fusion-orchestrate → /fusion-handoff
+```
+
+底层都是冲着"更懂你"调的：几个模型**盲答**（不搞回声室）、评审**分清共识和冲突**（不是求平均）、上下文**精挑而非乱塞**、每一步**验过再走**。
 
 ### 安装
 
@@ -174,14 +184,12 @@ git clone https://github.com/raydocs/fusion-deck.git
 bash fusion-deck/install.sh
 ```
 
-然后在 Claude Code 里跑一下 **`/reload-skills`**（或者直接重启），就齐活了——`/fusion`、`/fusion-review`…… 拿来就能用。
+然后在 Claude Code 里跑一下 **`/reload-skills`**（或者直接重启），就齐活了 —— `/fusion`、`/fusion-plan`…… 拿来就能用。
 
-**想凑齐三个模型的完整阵容**，再装两个可选 CLI 就行：
+**想凑齐三个模型的完整阵容**，再装两个可选 CLI（并各自登录好）：
 
 - [`codex`](https://developers.openai.com/codex) —— 接上 GPT‑5.5
 - [`gemini`](https://github.com/google-gemini/gemini-cli) —— 接上 Gemini 3.1 Pro
-
-没装也不耽误用：它会拿现有的模型接着跑，而且每次都老老实实告诉你这回到底用了哪几个模型——绝不糊弄你说「满配」。
 
 想随时检查一下：
 
@@ -196,14 +204,15 @@ bash ~/.claude/skills/fusion-deck/scripts/smoke_test.sh     # 本地自检（不
 /fusion 预订流程到底用乐观锁还是悲观锁？按我们这个量级帮我权衡下
 /fusion-review git diff main...HEAD
 /fusion-plan 加一个带测试的 /health 接口
+/fusion-context 把结账流程整理一下，我要交给另一个 agent
 /fusion-orchestrate docs/plans/add-health.md
 /fusion-handoff 这次的鉴权重构
 ```
 
 ### 几点说明
 
-- **花多少、用了谁，都摆在明面上。** 三个模型一起上更费 token，也得等最慢的那个，所以默认只有 `/fusion` 和 `/fusion-review` 才这么干；其余命令默认走单模型，图个快。
-- **不糊弄。** 每个面板答案都会写明这回到底是哪几个模型回答的。
+- **省钱省在哪。** 它复用你电脑里已经登录的订阅（Claude / `codex` / `gemini`），不像 OpenRouter Fusion 那样按 token 收 API 费 —— **前提是你有这三家的订阅。** 整桌一起上更费额度、也得等最慢的那个，所以默认只有 `/fusion` 和 `/fusion-review` 才开整桌；其余命令走单模型，图个快。
+- **不糊弄。** 每个面板答案都会写明这回到底是哪几个模型回答的；小阵容绝不冒充满配。
 - **仓库里不放密钥。** 登录的事交给各家 CLI，绝不往代码里塞私密信息。
 
 ### 许可证
