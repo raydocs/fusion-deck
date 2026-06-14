@@ -24,7 +24,10 @@ selecting (keep related files; prune only the clearly-unrelated), but to **conci
 - **Line slices** — large, partially-relevant files: only the relevant ranges, each labeled
   `(lines START-END: one-line description)`.
 - **Codemap** — peripheral orientation files: `File: <path>` + `Imports:` bullets + class/function/type
-  **signatures only**, no bodies. Get these cheaply with grep on declaration patterns (see the reference).
+  **signatures only**, no bodies. Generate with `bash <skill-root>/scripts/codemap.sh <path>` — a 3-tier
+  honest-degrade map (tree-sitter → ctags → grep) that discloses `CODEMAP_STATE=<TREESITTER|CTAGS|REGEX>`;
+  the grep tier is the zero-dependency floor, ctags/tree-sitter are auto-detected upgrades (see
+  `references/codemap.md`).
 - **Tree-only** — path appears in `file_map` for structure, no content.
 
 ## Step 3 — Assemble in the FIXED order, under budget
@@ -50,6 +53,21 @@ deterministically: keep equal head+tail, insert a `[content truncated]` marker o
 Scan for secrets before emitting: never include `.env`, API keys, tokens, credentials, or private
 absolute paths (see `references/safety.md` deny-patterns); redact or drop them. Write the pack to a real
 file (default `docs/context-packs/<slug>.md`) so it's inspectable and re-openable by path.
+
+## `--discover` (optional agentic curation)
+
+If `$ARGUMENTS` contains `--discover`, don't hand-pick files — have a fast subagent explore the repo and
+propose a **selection manifest** (`.fusion/selection.json`) where **every selected file carries evidence**
+(a grep match, an import path, a git-diff hit, a test reference). Validate it:
+
+```bash
+python3 <skill-root>/scripts/selection_lint.py .fusion/selection.json
+```
+
+A file with no evidence is **dropped** (the linter's S007 gate), so the pack degrades to mechanical
+selection rather than hallucinated relevance; the manifest's `rejected` list records what was cut, so the
+pack stays reviewable. Then assemble the fixed five sections from the manifest as in Step 3. This mode is
+**optional** — the default `/fusion-context` stays mechanical. See `references/context-discovery.md`.
 
 ## Present
 

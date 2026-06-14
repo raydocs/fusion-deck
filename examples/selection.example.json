@@ -1,0 +1,41 @@
+{
+  "task": "Add a `--list-rules` flag to the selection-manifest linter and document the evidence gate",
+  "budget_tokens": 60000,
+  "selected": [
+    {
+      "path": "scripts/selection_lint.py",
+      "mode": "full",
+      "reason": "Primary edit target — the linter that must gain the --list-rules flag; needs full content to edit safely.",
+      "evidence": ["grep:def list_rules", "grep:--list-rules", "test:selection.example.json passes"]
+    },
+    {
+      "path": "scripts/lint_contract.py",
+      "mode": "codemap",
+      "reason": "Sibling linter whose --list-rules + RULES-dict structure selection_lint mirrors; orientation only, not edited.",
+      "evidence": ["grep:def list_rules", "grep:RULES = {", "import:mirrored-by scripts/selection_lint.py"]
+    },
+    {
+      "path": "references/context-discovery.md",
+      "mode": "slice",
+      "lines": "1-60",
+      "reason": "Spec for --discover and the manifest schema the linter enforces; the evidence-gate prose lives here and must stay in sync.",
+      "evidence": ["grep:evidence gate", "grep:S007", "diff"]
+    },
+    {
+      "path": "references/safety.md",
+      "mode": "tree",
+      "reason": "Source of the secrets deny-pattern list that rule S010 enforces; cited for provenance, no content needed in the pack.",
+      "evidence": ["grep:deny-patterns", "grep:.env*"]
+    }
+  ],
+  "rejected": [
+    {
+      "path": "scripts/detect_panel.sh",
+      "reason": "Panel-availability probe — unrelated to manifest linting; no import or call path to the linter."
+    },
+    {
+      "path": "references/judge-rubric.md",
+      "reason": "Judge synthesis policy; matched 'rules' textually but is about panel judging, not lint rules — false grep hit, dropped."
+    }
+  ]
+}

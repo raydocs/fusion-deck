@@ -76,9 +76,12 @@ EOF
 }
 gen_wrapper fusion             "Fan a hard question to the premium model panel (Opus 4.8 + GPT-5.5 + Gemini 3.1 Pro), Opus judges and writes the answer." "<the hard question or task>"
 gen_wrapper fusion-review      "Audit code/a plan with the premium panel (Opus 4.8 + GPT-5.5 + Gemini 3.1 Pro), Opus-judged structured findings." "<diff, files, or design to review>"
-gen_wrapper fusion-plan        "Turn a vague request into a verifiable Claude Code Workflow Contract (not a Codex /goal)." "<the vague request> [--panel]"
+gen_wrapper fusion-investigate "Investigate a bug/'why is it like this' evidence-first; the panel adjudicates competing hypotheses; ends at a root-cause report." "<the bug or question> [--panel]"
+gen_wrapper fusion-plan        "Turn a vague request into a verifiable Claude Code Workflow Contract (not a Codex /goal)." "<the vague request> [--panel] [--deep]"
 gen_wrapper fusion-context     "Build a RepoPrompt-style Context Pack (fixed order, density tiers, token budget)." "<task the pack is for> [paste|handoff|agent]"
-gen_wrapper fusion-orchestrate "Decompose a task, dispatch scoped subagents, verify each, roll up (orchestrator never implements)." "<contract path or task> [--panel]"
+gen_wrapper fusion-orchestrate "Decompose a task, dispatch scoped subagents, verify each, roll up (orchestrator never implements)." "<contract path or task> [--panel] [--worktrees]"
+gen_wrapper fusion-optimize    "Measure→change→re-measure loop; baseline first, one attributed change per iteration, the panel calls continue/stop." "<metric + scope + stop criterion> [--cap N]"
+gen_wrapper fusion-refactor    "Analyze structure, plan behavior-preserving steps, steer one agent through them (structure, not behavior)." "<files, directory, or system>"
 gen_wrapper fusion-handoff     "Emit a Handoff Capsule (purpose, summary, files, verification, risks, next steps)." "<what to hand off>"
 
 echo
@@ -86,7 +89,8 @@ echo "-- panel availability on this machine --"
 bash "$src/scripts/detect_panel.sh" || true
 echo
 echo "Done. Reload in Claude Code with /reload-skills (or restart). Then these slash commands work:"
-echo "      /fusion-review  /fusion-plan  /fusion-context  /fusion-orchestrate  /fusion-handoff"
+echo "      /fusion-review  /fusion-investigate  /fusion-plan  /fusion-context"
+echo "      /fusion-orchestrate  /fusion-optimize  /fusion-refactor  /fusion-handoff"
 echo "      Plain fusion: use the existing /fusion skill, or invoke /fusion-deck."
 echo "      Offline self-check anytime:  bash \"$src/scripts/smoke_test.sh\""
 echo "      For the PREMIUM triple panel, install the codex and gemini CLIs (see detect_panel output)."

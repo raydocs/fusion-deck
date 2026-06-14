@@ -4,8 +4,10 @@ A Context Pack is a single curated file that another agent (or model) consumes t
 **curation is the bottleneck.** Don't dump the repo; assemble the right files at the right density, in a
 fixed order, under an explicit token budget.
 
-In v1 this is **prompt-driven with an executable recipe** — you (the model) run the bash below and emit
-the file. (A dedicated builder script is roadmap, not v1: it would risk a mini-RepoPrompt.)
+By default this is **prompt-driven with an executable recipe** — you (the model) run the bash below and
+emit the file. An **optional** agentic `--discover` mode (evidence-gated; see
+`references/context-discovery.md`) proposes a reviewable selection manifest instead — it stays a thin,
+lint-checked helper rather than a mini-RepoPrompt.
 
 ## Fixed section order
 
@@ -37,10 +39,14 @@ File: path/to/file.py
 - **Line slices** — large, partially relevant files: only the relevant ranges, each labeled before its
   fence: `(lines 40-90: the auth-retry path)`.
 - **Codemap** (signatures only) — peripheral orientation files: `Imports:` bullets + class/function/type
-  signatures, **no bodies**. Get them cheaply, e.g.:
+  signatures, **no bodies**. Generate with the honest-degrade helper (tree-sitter → ctags → grep; discloses
+  `CODEMAP_STATE`):
   ```bash
-  grep -nE '^(import |from |class |def |func |type |interface |export )' path/to/file
+  bash <skill-root>/scripts/codemap.sh path/to/file
   ```
+  Its zero-dependency floor is the same grep heuristic
+  `grep -nE '^(import |from |class |def |func |type |interface |export )' path/to/file`; ctags and
+  tree-sitter are auto-detected upgrades. See `references/codemap.md`.
 - **Tree-only** — the path appears in `file_map`; no content block.
 
 ## Token budget (enforced)

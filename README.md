@@ -77,6 +77,12 @@ findings list, must‑fix first. For the calls where being confidently wrong is 
   The model finally reasons about your real code instead of drowning in the whole repo.
 - 🔀 **`/fusion-orchestrate <task>`** → **splits the work into pieces, runs each in a focused sub‑agent, and
   verifies each one before starting the next.** Big changes done carefully — not one hopeful mega‑prompt.
+- 🔎 **`/fusion-investigate <bug or "why is it like this">`** → evidence first, then the panel adjudicates
+  the competing theories. A root‑cause report, not a confident guess.
+- ⏱️ **`/fusion-optimize <metric>`** → a measure → change → re‑measure loop: baseline first, one change at a
+  time, the panel calls continue/stop. No baseline, no bragging.
+- ♻️ **`/fusion-refactor <target>`** → structure analysis → behavior‑preserving plan → one steered agent.
+  Cleaner code, same behavior (proven by the tests that stay green).
 - 🤝 **`/fusion-handoff <work>`** → a clean handoff note (done / verified / risks / next steps) so the next
   agent — or future‑you — picks up in seconds.
 
@@ -116,9 +122,12 @@ bash ~/.claude/skills/fusion-deck/scripts/smoke_test.sh     # offline self-check
 ```text
 /fusion Should we use optimistic or pessimistic locking for the booking flow? Trade-offs at our scale.
 /fusion-review git diff main...HEAD
+/fusion-investigate the cart total is wrong for multi-currency orders
 /fusion-plan add a /health endpoint with a test
 /fusion-context the checkout flow, so I can hand it to another agent
 /fusion-orchestrate docs/plans/add-health.md
+/fusion-optimize cut p95 latency of /search under load; stop at 200ms
+/fusion-refactor the payments module
 /fusion-handoff the auth refactor
 ```
 
@@ -193,6 +202,9 @@ OpenRouter 的 **DRACO** 深度研究基准 —— 10 个领域、100 道题：
 - 🧩 **`/fusion-plan <一句模糊的话>`** → 一份真计划：目标、怎样算做完、分几步、有哪些坑。别再手把手哄着 AI 猜你想要啥 —— 先把你真正的意思钉死。
 - 📦 **`/fusion-context <任务>`** → 一份卡着 token 预算、**只装该看的文件**的上下文包。让模型对着你真正的代码动脑子，而不是被整个仓库淹死。
 - 🔀 **`/fusion-orchestrate <任务>`** → **把活拆成小块，每块交给一个专注的子 agent，做完一块先验过再开下一块。** 大改动也能稳稳落地，而不是赌一个超长 prompt 一把梭。
+- 🔎 **`/fusion-investigate <bug 或"它为啥长这样">`** → 先把证据查清，再让一桌模型裁决相互打架的假设。给你一份有根因的报告，而不是一个自信的猜测。
+- ⏱️ **`/fusion-optimize <指标>`** → 度量 → 改一处 → 复测的循环：先立 baseline，一次只动一处，由 panel 拍板继续还是收手。没 baseline 就不准吹。
+- ♻️ **`/fusion-refactor <目标>`** → 结构分析 → 保行为的计划 → 一个被引导的 agent 落地。代码更干净、行为不变（靠一直绿的测试证明）。
 - 🤝 **`/fusion-handoff <工作>`** → 一份干净的交接（做了啥 / 验了啥 / 有啥风险 / 下一步），下一个 agent —— 或者明天的你 —— 接手秒上手。
 
 串起来用，一句模糊需求就能走到一个验证过、能交付的改动：
@@ -229,9 +241,12 @@ bash ~/.claude/skills/fusion-deck/scripts/smoke_test.sh     # 本地自检（不
 ```text
 /fusion 预订流程到底用乐观锁还是悲观锁？按我们这个量级帮我权衡下
 /fusion-review git diff main...HEAD
+/fusion-investigate 多币种订单的购物车总价算错了
 /fusion-plan 加一个带测试的 /health 接口
 /fusion-context 把结账流程整理一下，我要交给另一个 agent
 /fusion-orchestrate docs/plans/add-health.md
+/fusion-optimize 把 /search 的 p95 延迟压下来，目标 200ms
+/fusion-refactor 支付模块
 /fusion-handoff 这次的鉴权重构
 ```
 

@@ -31,7 +31,10 @@ There is no MCP server, no UI, no OpenRouter, no model-config platform.
   work**, honest status states, and an **escape hatch** — emitted as a *Claude Code Workflow Contract*.
   This skill does **not** use Codex's `/goal` (Claude Code has no such tool).
 - **Context + orchestration** (from RepoPrompt CE): a curated **Context Pack**, a **shared plan**,
-  **scoped subagent briefs**, **verify-then-dispatch-fresh**, and a **Handoff Capsule**.
+  **scoped subagent briefs**, **verify-then-dispatch-fresh**, and a **Handoff Capsule** — plus its richer
+  workflow shapes: evidence-first **investigation**, a measured **optimize** loop, behavior-preserving
+  **refactor**, a tree-sitter→ctags→grep **codemap**, evidence-gated **context discovery**, and
+  **worktree** isolation. Every "ask the oracle" becomes "ask the panel."
 
 ## The panel and its honest-degrade rule
 
@@ -60,12 +63,15 @@ independent cross-checking changes the answer's risk profile**; everywhere else,
 | --- | --- | --- |
 | `/fusion` | Fan a hard question to the panel; Opus judges and writes the answer. | **Yes** |
 | `/fusion-review` | Audit code/a plan via the panel; structured, cross-checked findings. | **Yes** |
-| `/fusion-plan` | Turn a vague request into a Claude Code Workflow Contract. | No — single model; `--panel` to escalate a genuinely ambiguous, high-stakes planning question |
-| `/fusion-context` | Build a RepoPrompt-style Context Pack. | No — curation is mechanical |
-| `/fusion-orchestrate` | Decompose, dispatch scoped subagents, verify each, roll up. | No — single-model orchestrator; `--panel` to review a thorny decomposition |
+| `/fusion-investigate` | Evidence-first root-cause investigation; panel adjudicates competing hypotheses. | By exception — only when ≥2 hypotheses survive the evidence; `--panel` forces it |
+| `/fusion-plan` | Turn a vague request into a Claude Code Workflow Contract; `--deep` adds involvement + a critique pass. | No — single model; `--panel` to escalate a genuinely ambiguous, high-stakes planning question |
+| `/fusion-context` | Build a RepoPrompt-style Context Pack; `--discover` adds evidence-gated agentic curation. | No — curation is mechanical |
+| `/fusion-orchestrate` | Decompose, dispatch scoped subagents, verify each, roll up; `--worktrees` isolates parallel items. | No — single-model orchestrator; `--panel` to review a thorny decomposition |
+| `/fusion-optimize` | Measure→change→re-measure loop; the panel calls continue/stop at each decision point. | By exception — only at the stop/continue decision points |
+| `/fusion-refactor` | Structure analysis → behavior-preserving plan → steer-one-agent execution. | No — composes review/plan/orchestrate |
 | `/fusion-handoff` | Emit a Handoff Capsule. | No — summarization |
 
-All six install as `~/.claude/commands/<name>.md` wrappers (see README → Install); the whole skill is also
+All nine install as `~/.claude/commands/<name>.md` wrappers (see README → Install); the whole skill is also
 invocable as `/fusion-deck`. (If a separate skill named `fusion` is also installed, that
 skill takes precedence for `/fusion` — this skill does not assume one is present.)
 
@@ -87,6 +93,10 @@ Each command file in `commands/` is the procedure; it loads the matching `refere
    `[incomplete]` carries reason / proof / attempted / impact / next-decision. Report failures plainly.
 7. **Safety.** Never hardcode keys, accounts, or private paths; never leak secrets into a Context Pack;
    the smoke test never calls paid models unless `FUSION_LIVE=1`. (`references/safety.md`)
+8. **Honest-degrade beyond the panel.** The new helpers obey the same rule: `codemap.sh` discloses
+   `CODEMAP_STATE` and falls back tree-sitter→ctags→grep; `selection_lint.py` gates discovered context on
+   evidence (S007); `--deep`/`--discover`/`--worktrees` are opt-in. Use the best available, disclose what
+   ran, fall back loudly. (`references/codemap.md`, `references/context-discovery.md`, `references/worktrees.md`)
 
 ## Skill root & paths
 

@@ -39,25 +39,34 @@ for s in "$root"/scripts/*.sh; do
 done
 
 echo "-- python compile --"
-if python3 -m py_compile "$root/scripts/lint_contract.py" 2>/tmp/pfo_py.err; then ok "py_compile lint_contract.py"
-else bad "py_compile lint_contract.py: $(cat /tmp/pfo_py.err)"; fi
+for p in "$root"/scripts/*.py; do
+  if python3 -m py_compile "$p" 2>/tmp/pfo_py.err; then ok "py_compile $(basename "$p")"
+  else bad "py_compile $(basename "$p"): $(cat /tmp/pfo_py.err)"; fi
+done
 if python3 "$root/scripts/lint_contract.py" --list-rules >/dev/null 2>&1; then ok "lint_contract.py --list-rules"
 else bad "lint_contract.py --list-rules"; fi
+if python3 "$root/scripts/selection_lint.py" --list-rules >/dev/null 2>&1; then ok "selection_lint.py --list-rules"
+else bad "selection_lint.py --list-rules"; fi
 
 echo "-- required files --"
 required=(
   README.md LICENSE install.sh SKILL.md
   commands/fusion.md commands/fusion-review.md commands/fusion-plan.md
   commands/fusion-context.md commands/fusion-orchestrate.md commands/fusion-handoff.md
+  commands/fusion-investigate.md commands/fusion-optimize.md commands/fusion-refactor.md
   scripts/assert_triple_panel.sh scripts/detect_panel.sh scripts/run_codex.sh scripts/run_gemini.sh
   scripts/run_triple_fusion.sh scripts/smoke_test.sh scripts/lint_contract.py
+  scripts/codemap.sh scripts/selection_lint.py scripts/fusion_worktree.sh
   references/panel-prompt.md references/judge-rubric.md references/workflow-contract.md
   references/context-pack-format.md references/orchestration-rubric.md
   references/subagent-prompt-template.md references/verifier-prompt-template.md
   references/handoff-capsule.md references/contract-lint-rules.md references/degraded-mode.md
   references/safety.md
+  references/investigation-rubric.md references/optimize-scoreboard.md references/codemap.md
+  references/context-discovery.md references/refactor-recipe.md references/worktrees.md
   examples/workflow-contract.example.md examples/context-pack.example.md
   examples/fusion-review.example.md examples/subagent-task.example.md examples/handoff.example.md
+  examples/selection.example.json
 )
 for f in "${required[@]}"; do
   [ -s "$root/$f" ] && ok "exists $f" || bad "MISSING or empty: $f"
@@ -106,6 +115,41 @@ if python3 "$root/scripts/lint_contract.py" "$bad_fixture" >/dev/null 2>&1; then
   bad "lint should REJECT a contract missing required sections / using /goal"
 else ok "lint REJECTS a malformed contract (missing sections + /goal)"; fi
 rm -f "$bad_fixture"
+
+echo "-- codemap honest-degrade --"
+cm="$(FUSION_CODEMAP_TIER=regex bash "$root/scripts/codemap.sh" "$root/scripts/lint_contract.py" 2>/dev/null)"
+echo "$cm" | grep -q '^CODEMAP_STATE='      && ok "codemap.sh prints CODEMAP_STATE"            || bad "codemap.sh missing CODEMAP_STATE"
+echo "$cm" | grep -q '^CODEMAP_STATE=REGEX' && ok "codemap.sh honors FUSION_CODEMAP_TIER=regex" || bad "codemap.sh regex-tier override broken"
+# A bare `tree-sitter` CLI must NOT upgrade the tier (only python grammars actually parse) — regression for
+# the honest-degrade over-claim where a present-but-unused CLI faked CODEMAP_STATE=TREESITTER.
+cm_ts_dir="$(mktemp -d /tmp/pfo_cmts.XXXXXX)"
+printf '#!/usr/bin/env bash\necho "tree-sitter 0.0-fake"\n' > "$cm_ts_dir/tree-sitter"; chmod +x "$cm_ts_dir/tree-sitter"
+cm_base="$(bash "$root/scripts/codemap.sh" "$root/scripts/lint_contract.py" 2>/dev/null | grep '^CODEMAP_STATE=')"
+cm_fake="$(PATH="$cm_ts_dir:$PATH" bash "$root/scripts/codemap.sh" "$root/scripts/lint_contract.py" 2>/dev/null | grep '^CODEMAP_STATE=')"
+if [ "$cm_base" = "$cm_fake" ]; then ok "codemap.sh: a bare tree-sitter CLI does not change the tier ($cm_fake)"
+else bad "codemap.sh: a bare tree-sitter CLI changed the tier ($cm_base -> $cm_fake) — over-claim"; fi
+rm -rf "$cm_ts_dir"
+
+echo "-- selection_lint behavior --"
+if python3 "$root/scripts/selection_lint.py" "$root/examples/selection.example.json" >/dev/null 2>&1; then
+  ok "selection_lint PASSES the good example manifest"
+else bad "selection_lint should pass examples/selection.example.json"; fi
+bad_sel="$(mktemp /tmp/pfo_bad_sel.XXXXXX.json)"
+printf '{"task":"x","budget_tokens":1000,"selected":[{"path":"a.py","mode":"full","reason":"r"}]}\n' > "$bad_sel"
+if python3 "$root/scripts/selection_lint.py" "$bad_sel" >/dev/null 2>&1; then
+  bad "selection_lint should REJECT a selected file with no evidence (S007)"
+else ok "selection_lint REJECTS a no-evidence manifest (S007 gate)"; fi
+rm -f "$bad_sel"
+
+echo "-- worktree NO_GIT guard --"
+wt_tmp="$(mktemp -d /tmp/pfo_wt.XXXXXX)"
+if ( cd "$wt_tmp" && bash "$root/scripts/fusion_worktree.sh" list >/dev/null 2>&1 ); then
+  bad "fusion_worktree.sh list should fail (non-zero) outside a git repo"
+else
+  wt="$(cd "$wt_tmp" && bash "$root/scripts/fusion_worktree.sh" list 2>/dev/null)"
+  echo "$wt" | grep -q '^WORKTREE_STATE=NO_GIT' && ok "fusion_worktree.sh reports NO_GIT outside a repo" || bad "fusion_worktree.sh missing NO_GIT line"
+fi
+rm -rf "$wt_tmp"
 
 echo
 echo "== result: $pass passed, $fail failed =="

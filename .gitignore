@@ -8,4 +8,7 @@ __pycache__/
 # Local artifacts the skill may write when used in a project
 /docs/context-packs/
 /docs/plans/
+/docs/investigations/
 /handoffs/
+/.fusion/
+/.fusion-worktrees/

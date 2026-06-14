@@ -51,6 +51,13 @@ Choose the dispatch mode:
 - **Steer-one-agent:** keep one session across items only when items are tightly coupled or there are
   many tiny ones.
 
+**`--worktrees` (optional isolation for parallel dispatch).** If `$ARGUMENTS` contains `--worktrees`, run
+each parallel item in its own git worktree so concurrent edits can't collide:
+`bash <skill-root>/scripts/fusion_worktree.sh create <item-id>` (it copies `.worktreeinclude`-matched local
+files like `.env.local`), dispatch the subagent there, **verify the worktree's diff before merging it
+back**, then `… cleanup <item-id>`. Prefer your harness's native worktree isolation if it has one. Default
+is **off** — in-place sequential. See `references/worktrees.md`.
+
 Write each brief from `references/subagent-prompt-template.md`: it **orients, not directs** — `Goal`, key
 file paths, and **discoveries the agent couldn't find itself**; it scopes explicitly ("Read the plan at
 `<path>`; your job is item N; items X,Y are handled separately; do only this; stop when done"); and it

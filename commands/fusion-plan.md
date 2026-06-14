@@ -54,6 +54,21 @@ high-stakes — first run the `/fusion` panel procedure (read `<skill-root>/comm
 *planning question* ("what's the best approach / decomposition for X?"), then write the contract grounded
 in the synthesized answer. Most plans don't need this — don't pay for a panel by default.
 
+## `--deep` (optional: graduated involvement + a critique pass)
+
+For a high-stakes design where you want a polished plan document:
+
+1. **Ask involvement up front** — one question: *up-front* (clarify the request before exploring),
+   *mid-flow* (check in before the critique), or *hands-off* (surface the plan when ready). Default if the
+   user doesn't answer: hands-off. **Honor the choice** — if they picked a checkpoint, pause there and
+   wait; never silently demote them.
+2. **Explore the seams**, then draft the contract (Steps 1–2).
+3. **Critique pass** — dispatch one critic subagent (or `--panel`) scoped to the top under-specified
+   seams, contradictions, over-planning to cut, and the questions that would change the order. Fold it in
+   so the plan gets **shorter and sharper** — a plan should shrink as it matures.
+
+Deep mode still emits a lint-passing Workflow Contract (Step 3); it is **not** a Codex `/goal`.
+
 ## Present
 
 The contract path + a one-paragraph summary (objective, item count, the riskiest item). Then suggest

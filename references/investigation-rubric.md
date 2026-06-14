@@ -1,0 +1,124 @@
+# Investigation rubric
+
+How `/fusion-investigate` finds a **root cause** — not a plausible story. The load-bearing idea is a
+strict ordering: **evidence before hypotheses, hypotheses before the panel, the panel only by exception.**
+You never assert a cause without a location, and the work ends at a durable, growing report file — it does
+**not** implement the fix.
+
+The investigator's stance mirrors the orchestrator's (`orchestration-rubric.md`): you plan, dispatch
+read-only subagents, and adjudicate; the subagents read and reason but do **not** edit. Nothing in an
+investigation changes product code.
+
+## The report is the durable artifact
+
+Open the report file in Step 1 and **grow it across the phases** — it is the state, not a write-up bolted
+on at the end. Default path: `docs/investigations/<topic>-<DATE>.md` (`<topic>` a short slug of the
+symptom; `<DATE>` ISO `YYYY-MM-DD`). A fresh subagent or a post-compaction you should be able to read it
+and know exactly what's been ruled in, ruled out, and why. Append; don't rewrite history — an eliminated
+hypothesis stays in the record with the evidence that killed it.
+
+## Phase 1 — Triage & competing hypotheses
+
+Restate the symptom as something checkable, then enumerate the suspects:
+
+- **Observed vs expected** — the concrete behavior and what it should be instead. An error string, a wrong
+  value, a missing row, a hang. No adjectives; the literal symptom.
+- **Repro** — the smallest sequence that reliably triggers it, or honestly "intermittent / not yet
+  reproduced." A cause you can't trigger is a cause you can't prove; say so.
+- **Competing hypotheses (ranked)** — a *short set*, not one. The single most important discipline of the
+  phase: write down **2–4 plausible causes**, ranked by prior likelihood, each phrased as a falsifiable
+  claim ("X happens because Y returns null when Z"). One hypothesis is not a triage — it's a guess wearing
+  a confidence it hasn't earned. Keep "what's observed" strictly separate from "what might cause it" so the
+  symptom never silently becomes its own explanation.
+
+Write all of this into the report under **Symptom** and **Hypotheses (ranked)** before gathering a single
+fact.
+
+## Phase 2 — Evidence gathering (read-only subagents → the ledger)
+
+Dispatch `Explore` / `general-purpose` Task subagents to collect **facts with locations**. Use subagents
+to keep your own context lean and to parallelize independent traces; for a large or unfamiliar surface,
+build a pack first with `/fusion-context`. Each brief is read-only and scoped to one trace — the call
+path, a suspect module, the git history of one file. Subagents do **not** spawn their own subagents and do
+**not** edit (one level of fan-out, same as orchestration).
+
+Everything they return lands in the **evidence ledger** — the spine of the report. Every entry is a
+**fact anchored to a location**, never an opinion:
+
+| kind | what it looks like |
+| --- | --- |
+| code | `file:line` of the offending statement / branch / signature |
+| history | `git blame <file>:<line>` → commit; `git log -S<symbol>`; the introducing diff |
+| runtime | the failing test name + assertion, a log line with its source, a stack frame |
+| data | the actual value observed (`null`, off-by-one index, wrong enum) vs expected |
+
+**The gate: no location, not evidence.** "It's probably the cache" is not a ledger entry; "`cache.go:88`
+returns the stale entry because the TTL check uses `<=` not `<`" is. If a claim can't be pinned to a
+`file:line` / commit / test, it stays a hypothesis, not a fact.
+
+After each batch, score every hypothesis against the ledger and record the verdict in the report:
+
+- **supported** — a ledger fact is consistent with it and predicted by it.
+- **weakened** — a fact is in tension with it but doesn't kill it.
+- **eliminated** — a fact is incompatible with it. Write *why*, with the deciding location. An eliminated
+  hypothesis is a result; keep it.
+
+Iterate: surviving hypotheses generate the next traces to dispatch. Stop gathering when one cause is
+decisively supported and the rest are eliminated — or when ≥2 genuinely survive and only judgment can
+separate them (→ Phase 3).
+
+## Phase 3 — Panel adjudication, BY EXCEPTION
+
+Most investigations end here without a panel, and that is the **expected, cheaper path** — say so plainly.
+
+- **Evidence is decisive** (one hypothesis supported, the rest eliminated by located facts) → **SKIP the
+  panel.** Record in the report: "Panel skipped — evidence decisive; <cause> supported by <file:line>,
+  alternatives eliminated." Spending a panel on a settled question is waste, not rigor — so this is the
+  default; `--panel` overrides it when you want the cross-check on a high-stakes call anyway.
+- **≥2 hypotheses genuinely survive the evidence** → fan the **competing theories + the evidence ledger**
+  to the `/fusion` panel (read `commands/fusion.md`). This is a **Track B** adjudication (see
+  `judge-rubric.md`): the panelists each weigh which cause the *ledger* supports; Opus 4.8 judges
+  consensus / contradictions / which cause the evidence backs / blind spots — it does not re-investigate
+  from memory. The question to the panel is "which of these located hypotheses does this evidence support,
+  and what's missing?" — not "what's the bug?"
+- `--panel` is the operator's explicit cross-check — it forces a panel even when you'd otherwise skip,
+  whether to adjudicate close survivors or to stress-test a root cause that looks decisive. It cross-checks
+  the conclusion drawn from the ledger; it never substitutes for the evidence-first phases.
+
+**Disclose the realized `PANEL_STATE`** in the report exactly as the disclosure rule requires
+(`degraded-mode.md`, `judge-rubric.md` provenance header): which panel actually ran and which panelists
+participated. A panelist that's missing, errored, or was dropped is **ABSENT** — never counted as silent
+agreement, and never lets a degraded panel read as PREMIUM. If the panel itself can't separate the
+survivors, that's a result too: name the experiment (a new log, a failing test, a value to capture) that
+*would* separate them, and lower the confidence accordingly.
+
+## Phase 4 — Root-cause report (do NOT implement)
+
+Finish the report so it stands on its own:
+
+- **Root cause** — the single cause, stated as a falsifiable claim, with its **deciding `file:line`** (and
+  introducing commit, if known). The whole report exists to earn this line; it must point at a location.
+- **Hypotheses eliminated** — each rejected candidate with the located fact that killed it. This is what
+  separates a root-cause report from a guess: the reader sees what was ruled out and how.
+- **Confidence — honest** — **proven** (a located fact and/or a failing test nails it) vs **suspected**
+  (consistent with the evidence but not yet demonstrated). Name the **residual uncertainty** out loud: what
+  you couldn't reach, what would raise confidence, what assumption you're carrying. A suspected cause
+  labeled "proven" is the investigation's version of faking green — don't.
+- **Recommended fix(es)** — where and what, ranked; note risk and blast radius. **Do not implement here.**
+  The handoff is `/fusion-plan` → `/fusion-orchestrate` to fix, or `/fusion-review` on the proposed fix.
+
+## Principles
+
+- **Evidence over assertion.** A located fact outranks a confident narrative, regardless of how plausible
+  the narrative is. The ledger is the argument.
+- **Never assert a cause without a location.** No `file:line` / commit / failing test → it's a hypothesis,
+  not a root cause. This is the gate; honor it everywhere.
+- **Keep what you ruled out.** Eliminated hypotheses with their deciding evidence are results — they stop
+  the next reader (or the next you) from re-chasing a dead end.
+- **Panel by exception, disclosed honestly.** Skip it when the evidence is decisive; run it only when ≥2
+  hypotheses survive; always disclose the realized `PANEL_STATE`. A missing panelist is **absent, never
+  silent agreement.**
+- **Confidence is part of the finding.** Proven vs suspected, with the residual uncertainty named. Honest
+  "suspected, here's what would confirm it" beats a falsely-certain "proven."
+- **Investigate, don't fix.** The deliverable is the grounded cause and a recommendation — implementing is
+  a separate, later command.
