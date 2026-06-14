@@ -100,6 +100,26 @@ Under the hood it's tuned to actually *get* you: panelists answer **blind** (no 
 **reconciles** consensus vs. contradictions (it doesn't average), context is **curated not dumped**, and
 every step is **verified before the next**.
 
+## Which command? (when to use what)
+
+Not sure which to reach for? Match your situation below — and when the task is easy, just ask Claude
+directly; the panel is for the calls where being wrong is expensive.
+
+| When you're trying to… | Reach for | Panel? |
+| --- | --- | --- |
+| Settle a hard call or trade-off (*"optimistic or pessimistic locking?"*) | `/fusion` | yes |
+| Vet code, a diff, or a plan before it ships | `/fusion-review` | yes |
+| Find the root cause of a bug, or *"why is it built like this?"* | `/fusion-investigate` | by exception |
+| Turn a vague idea into a concrete, checkable plan | `/fusion-plan` · `--deep` for a design doc | no |
+| Hand the *right* files to another model or agent | `/fusion-context` · `--discover` to auto-curate | no |
+| Execute a big, multi-step change carefully | `/fusion-orchestrate` · `--worktrees` to parallelize | no |
+| Make something measurably faster or smaller | `/fusion-optimize` | by exception |
+| Clean up structure **without** changing behavior | `/fusion-refactor` | no |
+| Pass work to the next agent (or future-you) | `/fusion-handoff` | no |
+
+Typical flows: a **feature** is `plan → context → orchestrate → handoff`; a **bug** is
+`investigate → plan → orchestrate`. A one-off hard question is just `/fusion`.
+
 ## Install
 
 ```bash
@@ -221,6 +241,24 @@ OpenRouter 的 **DRACO** 深度研究基准 —— 10 个领域、100 道题：
 ```
 
 底层都是冲着"更懂你"调的：几个模型**盲答**（不搞回声室）、评审**分清共识和冲突**（不是求平均）、上下文**精挑而非乱塞**、每一步**验过再走**。
+
+### 用哪个？（什么时候用什么）
+
+拿不准用哪个？对着下面找你的处境就行——简单活儿直接问 Claude，一桌模型是留给"答错了很贵"的场合的。
+
+| 你想干的 | 用 | 开整桌？ |
+| --- | --- | --- |
+| 拍一个难决定 / 权衡（*"乐观锁还是悲观锁？"*） | `/fusion` | 是 |
+| 上线前审一段代码 / diff / 方案 | `/fusion-review` | 是 |
+| 查一个 bug 的根因，或*"这东西为啥长这样？"* | `/fusion-investigate` | 按需 |
+| 把一句模糊想法变成能落地、能验收的计划 | `/fusion-plan` · `--deep` 出设计文档 | 否 |
+| 把**该看的**文件挑给另一个模型 / agent | `/fusion-context` · `--discover` 自动挑 | 否 |
+| 稳稳执行一个多步的大改动 | `/fusion-orchestrate` · `--worktrees` 并行 | 否 |
+| 把某个东西改得更快 / 更小（可度量） | `/fusion-optimize` | 按需 |
+| 只整理结构、**不改**行为 | `/fusion-refactor` | 否 |
+| 把活交给下一个 agent（或明天的你） | `/fusion-handoff` | 否 |
+
+常见流程：**功能** = `plan → context → orchestrate → handoff`；**改 bug** = `investigate → plan → orchestrate`。临时一个难问题，直接 `/fusion`。
 
 ### 安装
 
