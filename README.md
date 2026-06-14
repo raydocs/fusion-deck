@@ -227,12 +227,12 @@ OpenRouter 的 **DRACO** 深度研究基准 —— 10 个领域、100 道题：
 - 🧩 **`/fusion-plan <一句模糊的话>`** → 一份真计划：目标、怎样算做完、分几步、有哪些坑。别再手把手哄着 AI 猜你想要啥 —— 先把你真正的意思钉死。
 - 📦 **`/fusion-context <任务>`** → 一份卡着 token 预算、**只装该看的文件**的上下文包。让模型对着你真正的代码动脑子，而不是被整个仓库淹死。
 - 🔀 **`/fusion-orchestrate <任务>`** → **把活拆成小块，每块交给一个专注的子 agent，做完一块先验过再开下一块。** 大改动也能稳稳落地，而不是赌一个超长 prompt 一把梭。
-- 🔎 **`/fusion-investigate <bug 或"它为啥长这样">`** → 先把证据查清，再让一桌模型裁决相互打架的假设。给你一份有根因的报告，而不是一个自信的猜测。
-- ⏱️ **`/fusion-optimize <指标>`** → 度量 → 改一处 → 复测的循环：先立 baseline，一次只动一处，由 panel 拍板继续还是收手。没 baseline 就不准吹。
-- ♻️ **`/fusion-refactor <目标>`** → 结构分析 → 保行为的计划 → 一个被引导的 agent 落地。代码更干净、行为不变（靠一直绿的测试证明）。
+- 🔎 **`/fusion-investigate <bug 或"这玩意儿为啥长这样">`** → 先把证据摆清楚，再让一桌模型给互相打架的几个假设当裁判。最后给你一份能指到根因的报告，而不是一拍脑袋的猜测。
+- ⏱️ **`/fusion-optimize <指标>`** → 量一下 → 改一处 → 再量一遍的循环：先立基线，一次只动一处，该接着干还是收手让一桌模型拍板。没基线，就不准吹优化。
+- ♻️ **`/fusion-refactor <目标>`** → 先看结构哪儿乱、哪儿重复，再排一份"只动结构、不动行为"的计划，然后盯着一个 agent 一步步落地。代码更干净，行为照旧——测试从头到尾绿着，就是没改坏的凭据。
 - 🤝 **`/fusion-handoff <工作>`** → 一份干净的交接（做了啥 / 验了啥 / 有啥风险 / 下一步），下一个 agent —— 或者明天的你 —— 接手秒上手。
 
-**进阶用法：** `/fusion-plan --deep`（出正式设计文档 + 批判 pass）· `/fusion-context --discover`（让 agent 带证据门控地自己挑文件）· `/fusion-orchestrate --worktrees`（并行任务各跑在独立 git worktree 里）。都是可选的，普通命令照样简单。
+**进阶玩法：** `/fusion-plan --deep`（产出一份正式设计文档，中途还会自己挑一遍刺）· `/fusion-context --discover`（让 agent 自己挑文件，但每个都得拿得出证据）· `/fusion-orchestrate --worktrees`（并行的几路各跑在自己的 git worktree 里，互不踩脚）。都是可选项，平时用基础命令照样省心。
 
 串起来用，一句模糊需求就能走到一个验证过、能交付的改动：
 
@@ -250,11 +250,11 @@ OpenRouter 的 **DRACO** 深度研究基准 —— 10 个领域、100 道题：
 | --- | --- | --- |
 | 拍一个难决定 / 权衡（*"乐观锁还是悲观锁？"*） | `/fusion` | 是 |
 | 上线前审一段代码 / diff / 方案 | `/fusion-review` | 是 |
-| 查一个 bug 的根因，或*"这东西为啥长这样？"* | `/fusion-investigate` | 按需 |
+| 查一个 bug 的根因，或*"这玩意儿为啥长这样？"* | `/fusion-investigate` | 按需 |
 | 把一句模糊想法变成能落地、能验收的计划 | `/fusion-plan` · `--deep` 出设计文档 | 否 |
 | 把**该看的**文件挑给另一个模型 / agent | `/fusion-context` · `--discover` 自动挑 | 否 |
 | 稳稳执行一个多步的大改动 | `/fusion-orchestrate` · `--worktrees` 并行 | 否 |
-| 把某个东西改得更快 / 更小（可度量） | `/fusion-optimize` | 按需 |
+| 想把啥改得更快 / 更小（数字看得见） | `/fusion-optimize` | 按需 |
 | 只整理结构、**不改**行为 | `/fusion-refactor` | 否 |
 | 把活交给下一个 agent（或明天的你） | `/fusion-handoff` | 否 |
 
@@ -297,7 +297,7 @@ bash ~/.claude/skills/fusion-deck/scripts/smoke_test.sh     # 本地自检（不
 
 ### 几点说明
 
-- **省钱省在哪。** 它复用你电脑里已经登录的订阅（Claude / `codex` / `gemini`），不像 OpenRouter Fusion 那样按 token 收 API 费 —— **前提是你有这三家的订阅。** 整桌一起上更费额度、也得等最慢的那个，所以默认只有 `/fusion` 和 `/fusion-review` 开整桌，`/fusion-investigate` 和 `/fusion-optimize` 只在决策点上才开，其余命令走单模型，图个快。
+- **省钱省在哪。** 它复用你电脑里已经登录的订阅（Claude / `codex` / `gemini`），不像 OpenRouter Fusion 那样按 token 收 API 费 —— **前提是你有这三家的订阅。** 整桌一起上更费额度、也得等最慢的那个，所以默认只有 `/fusion` 和 `/fusion-review` 开整桌，`/fusion-investigate` 和 `/fusion-optimize` 只在关键决策点才开桌，其余命令走单模型，图个快。
 - **不糊弄。** 每个面板答案都会写明这回到底是哪几个模型回答的；小阵容绝不冒充满配。
 - **仓库里不放密钥。** 登录的事交给各家 CLI，绝不往代码里塞私密信息。
 
