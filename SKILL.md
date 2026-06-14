@@ -77,6 +77,29 @@ skill takes precedence for `/fusion` — this skill does not assume one is prese
 
 Each command file in `commands/` is the procedure; it loads the matching `references/*.md` on demand.
 
+## Routing — match the situation to the command
+
+When the user **describes a situation** instead of naming a command, map it to the fitting `/fusion-*` and
+**offer it** — they shouldn't have to know the catalogue. **Suggest, don't silently run:** the panel and
+orchestration commands cost quota and time, so name the command + why and let them say go. For a quick
+factual question, just answer directly — don't route a trivial ask into a panel.
+
+| The user is… | Offer |
+| --- | --- |
+| stuck on a hard call / trade-off, or wants one cross-checked | `/fusion` |
+| asking you to review code, a diff, or a plan before it ships | `/fusion-review` |
+| reporting a bug, or asking "why is it built like this / where does this come from" | `/fusion-investigate` |
+| handing you a vague, underspecified ask to build | `/fusion-plan` (`--deep` for a full design doc) |
+| about to send code to another model/agent, or working an unfamiliar repo | `/fusion-context` (`--discover` to auto-curate) |
+| asking for a big, multi-step change done carefully | `/fusion-orchestrate` (`--worktrees` for parallel siblings) |
+| asking to make something measurably faster / smaller / cheaper | `/fusion-optimize` |
+| asking to clean up or consolidate code without changing behavior | `/fusion-refactor` |
+| wrapping up and passing work on (to another agent or future-them) | `/fusion-handoff` |
+
+Compose, don't silo: a feature is usually `/fusion-plan → /fusion-context → /fusion-orchestrate →
+/fusion-handoff`; a bug is `/fusion-investigate → /fusion-plan → /fusion-orchestrate`. If two fit, prefer
+the cheaper/narrower one and say what the other would add.
+
 ## Core invariants (do not violate)
 
 1. **Never fake premium.** Disclose the real PANEL_STATE; degrade only explicitly. (`degraded-mode.md`)
