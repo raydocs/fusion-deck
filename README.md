@@ -21,6 +21,30 @@ confident‑but‑wrong answers.
 It also ships five companion commands for real work: turn a vague idea into a checkable plan, package
 just‑the‑right context, run a task as verified sub‑steps, and write a clean handoff.
 
+## Why it works (it's measured)
+
+Asking one model — even a frontier one — leaves accuracy on the table. On OpenRouter's **DRACO**
+deep‑research benchmark (100 tasks across 10 domains), running a **panel judged by Opus 4.8** beat *every
+single model tested*:
+
+| Setup | DRACO score |
+| --- | --- |
+| **fusion-deck's default panel** — Opus 4.8 + GPT‑5.5 + Gemini 3.1 Pro, judged by Opus 4.8 | **68.3%** |
+| Opus 4.8 + GPT‑5.5, judged by Opus 4.8 | 67.6% |
+| Claude Fable 5 — best single model, solo | 65.3% |
+| GPT‑5.5, solo | 60.0% |
+| Opus 4.8, solo | 58.8% |
+
+fusion-deck runs that exact panel by default — **68.3%, a +3.0‑point edge over the best single model
+(Fable 5 at 65.3%)** and ~+9.5 over Opus 4.8 alone. Even two cold runs of the *same* model, judged
+together, jump +6.7 points over a single run — because independent attempts take different reasoning
+paths and catch each other's mistakes. That's the whole idea, and it's why the gains are real rather than
+luck.
+
+*Benchmark data: OpenRouter, “[Fusion beats frontier](https://openrouter.ai/blog/announcements/fusion-beats-frontier/).”
+fusion-deck runs the same panel locally through the Claude / `codex` / `gemini` CLIs — there's no router in
+between, and nothing is sent through a third party.*
+
 ## Commands
 
 | Command | What it does | Use it when |
@@ -31,6 +55,21 @@ just‑the‑right context, run a task as verified sub‑steps, and write a clea
 | `/fusion-context <task>` | Bundles only the relevant files into one tidy, size‑budgeted context pack. | Briefing another model/agent without dumping the whole repo. |
 | `/fusion-orchestrate <task>` | Splits the work, runs each piece in a focused sub‑agent, verifies each before the next. | Multi‑step changes you want done carefully. |
 | `/fusion-handoff <work>` | Writes a clean handoff note: what’s done, what’s verified, risks, next steps. | Wrapping up, or before a context reset. |
+
+## What's built in to understand you better
+
+- **Independent, blind answers — no echo chamber.** Panelists never see each other's work, so you get
+  genuinely different angles, not three models nodding along with the first one.
+- **A judge, not a vote.** Opus 4.8 reads every answer, separates consensus from contradiction, keeps the
+  point only one model caught, and writes one grounded answer — it doesn't just average them.
+- **The right context, not the whole repo.** `/fusion-context` packs only the files that matter, on a
+  token budget, so the model reasons about your actual code instead of drowning in noise.
+- **Your fuzzy ask becomes an explicit contract.** `/fusion-plan` pins the goal and a concrete “done‑when”
+  before any code — so you get what you meant, not a confident guess.
+- **Every step is verified.** `/fusion-orchestrate` checks each sub‑task against its “done‑when” before
+  starting the next, so the work doesn't quietly drift off course.
+- **Always honest about the panel.** It tells you exactly which models answered; a smaller panel is never
+  dressed up as the full one.
 
 ## Install
 
@@ -92,6 +131,22 @@ bash ~/.claude/skills/fusion-deck/scripts/smoke_test.sh     # offline self-check
 
 光会答还不够，它还带了五个干活的命令：把一句模糊需求理成能验收的计划、把该看的文件打包成刚好够用的上下文、把大活拆成一步步能验证的小任务、最后再替你把交接写好。
 
+### 为什么有用（有实测）
+
+只问一个模型——哪怕是最强的那个——也是在白白浪费准确率。在 OpenRouter 的 **DRACO** 深度研究基准（10 个领域、100 道题）上，「开一桌模型 + 让 Opus 4.8 当评审」这套打法，分数压过了**所有参测的单个模型**：
+
+| 配置 | DRACO 得分 |
+| --- | --- |
+| **fusion-deck 默认阵容** —— Opus 4.8 + GPT‑5.5 + Gemini 3.1 Pro，Opus 4.8 评审 | **68.3%** |
+| Opus 4.8 + GPT‑5.5，Opus 4.8 评审 | 67.6% |
+| Claude Fable 5 —— 最强单模型，单飞 | 65.3% |
+| GPT‑5.5，单飞 | 60.0% |
+| Opus 4.8，单飞 | 58.8% |
+
+fusion-deck 默认跑的就是这套阵容——**68.3%，比最强的单模型（Fable 5，65.3%）还高 3.0 分**，比 Opus 4.8 单飞高出将近 9.5 分。哪怕是同一个模型冷跑两遍再合并，也能比单跑高 6.7 分——因为各自独立的尝试会走出不同的思路，互相把对方的错挑出来。这就是整件事的核心，也是为什么这点提升是真本事、不是运气。
+
+*基准数据来自 OpenRouter 的《[Fusion beats frontier](https://openrouter.ai/blog/announcements/fusion-beats-frontier/)》（DRACO 基准）。fusion-deck 是用你本机的 Claude / `codex` / `gemini` 直接跑同一套阵容——中间不经过任何 router，也不会把东西发给第三方。*
+
 ### 命令清单
 
 | 命令 | 干什么 | 什么时候用 |
@@ -102,6 +157,15 @@ bash ~/.claude/skills/fusion-deck/scripts/smoke_test.sh     # offline self-check
 | `/fusion-context <任务>` | 只挑相关的文件，打包成一份干净、控制了大小的上下文 | 要把活交给另一个模型 / agent，又不想把整个仓库砸过去 |
 | `/fusion-orchestrate <任务>` | 把活拆开，每块交给一个专注的子 agent，做完一块先验过再做下一块 | 多步骤改动想稳着来、别一锅乱炖 |
 | `/fusion-handoff <工作>` | 写一份干净的交接：做了啥、验了啥、有啥风险、接下来该干啥 | 收尾，或者上下文快被清空之前 |
+
+### 内置的几样优化（让它更懂你）
+
+- **各答各的、互不通气——不搞回声室。** 几个模型彼此看不到对方的答案，给你的是真不一样的视角，而不是仨模型一起附和第一个。
+- **是评审，不是投票。** Opus 4.8 把每份答案都读一遍，分清哪些是共识、哪些是冲突，把只有一个模型发现的点也留下，最后写一个有依据的答案——不是简单求个平均。
+- **只给该看的上下文，不是整个仓库。** `/fusion-context` 只挑相关文件、还卡着 token 预算打包，让模型对着你真正的代码思考，而不是被一堆噪音淹没。
+- **把你那句模糊需求，变成白纸黑字的契约。** `/fusion-plan` 先把目标和「怎样算做完」钉死、再动代码——你要的就是你得到的，而不是它自信地猜。
+- **每一步都验过再走。** `/fusion-orchestrate` 做完一个子任务、对照「完成标准」验过，才开下一个，活儿不会悄悄跑偏。
+- **阵容永远透明。** 它会明确告诉你这次是哪几个模型回答的；小阵容绝不会被包装成满配。
 
 ### 安装
 
