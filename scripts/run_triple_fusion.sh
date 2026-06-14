@@ -25,6 +25,13 @@ effort="${3:-medium}"
 [ -s "$prompt_file" ] || { echo "[run_triple_fusion] prompt file '$prompt_file' missing/empty." >&2; exit 2; }
 mkdir -p "$out_dir"
 
+# Clear stale artifacts from any PRIOR run that reused this out_dir. Without this, a leftover manifest /
+# output from an earlier run can be read mid-flight and mistaken for THIS run's result — a stale read looks
+# exactly like a degraded panel when it isn't. We remove only the files this script writes (never the whole
+# dir), which makes the manifest a reliable completion sentinel: manifest.txt present <=> this run finished.
+rm -f "$out_dir/manifest.txt" "$out_dir/codex_out.md" "$out_dir/gemini_out.md" \
+      "$out_dir/codex.log" "$out_dir/gemini.log"
+
 # Gate: confirm the panel (honors FUSION_ALLOW_DEGRADED). Capture PANEL_STATE without aborting so we
 # can record it in the manifest; if assert fails hard (no override), propagate its exit code.
 assert_out="$(bash "$here/assert_triple_panel.sh" 2>/dev/null)"; assert_rc=$?

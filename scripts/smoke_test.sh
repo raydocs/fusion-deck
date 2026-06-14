@@ -151,6 +151,21 @@ else
 fi
 rm -rf "$wt_tmp"
 
+echo "-- run_triple_fusion stale-output guard --"
+# A prior run's leftovers in a reused out_dir must be cleared at start, so a mid-run read can't mistake
+# stale output for this run's result. Hide the panel CLIs via PATH so the run aborts at the assert gate
+# AFTER the stale-clear (never a paid call); skip if a CLI somehow resolves under /usr/bin:/bin.
+if PATH=/usr/bin:/bin command -v codex >/dev/null 2>&1 || PATH=/usr/bin:/bin command -v gemini >/dev/null 2>&1; then
+  echo "  note  SKIP stale-clear check (a panel CLI resolves under /usr/bin:/bin; can't hide it safely)"
+else
+  rtf_d="$(mktemp -d /tmp/pfo_rtf.XXXXXX)"; rtf_p="$(mktemp /tmp/pfo_rtf_p.XXXXXX)"; printf 'hi\n' > "$rtf_p"
+  printf 'stale\n' > "$rtf_d/manifest.txt"; printf 'stale\n' > "$rtf_d/gemini_out.md"
+  PATH=/usr/bin:/bin "$sh_bin" "$root/scripts/run_triple_fusion.sh" "$rtf_p" "$rtf_d" >/dev/null 2>&1
+  if [ ! -e "$rtf_d/manifest.txt" ] && [ ! -e "$rtf_d/gemini_out.md" ]; then ok "run_triple_fusion clears stale outputs before running"
+  else bad "run_triple_fusion left stale artifacts ($(ls "$rtf_d" 2>/dev/null | tr '\n' ' '))"; fi
+  rm -rf "$rtf_d" "$rtf_p"
+fi
+
 echo
 echo "== result: $pass passed, $fail failed =="
 [ "$fail" -eq 0 ] || exit 1
