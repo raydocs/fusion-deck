@@ -1,5 +1,9 @@
 # fusion-deck
 
+<p align="center">
+  <img src="assets/hero.png" alt="fusion-deck — a panel of models, one judged answer" width="100%">
+</p>
+
 > 🃏 Three B-tier models gang up and out-argue the one A-tier star.
 > A Claude Code skill that turns a panel of models into one judged answer — plus a workflow toolkit that
 > plans, gathers context, splits tasks, and hands off.
