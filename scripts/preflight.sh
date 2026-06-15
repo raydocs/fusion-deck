@@ -98,22 +98,11 @@ if [ "${#changed[@]}" -gt 0 ]; then
   done
 fi
 
-# 3) Secret CONTENT scan — gitleaks if present, else regex floor. Disclose which ran.
-scan_state="REGEX"
-if command -v gitleaks >/dev/null 2>&1; then
-  scan_state="GITLEAKS"
-  if [ "$mode" = "commit" ]; then
-    if gitleaks protect --staged --redact --no-banner >/tmp/pfo_gl.txt 2>&1; then ok "gitleaks: no staged secrets"
-    else bad "gitleaks flagged staged secrets (values redacted):"; sed 's/^/        /' /tmp/pfo_gl.txt; fi
-  else
-    if gitleaks detect --redact --no-banner --log-opts="${base}..HEAD" >/tmp/pfo_gl.txt 2>&1; then ok "gitleaks: no secrets in range"
-    else bad "gitleaks flagged secrets in range (values redacted):"; sed 's/^/        /' /tmp/pfo_gl.txt; fi
-  fi
-  rm -f /tmp/pfo_gl.txt
-else
-  note "gitleaks not installed — DEGRADED to regex secret scan (install gitleaks for a real scan)"
-  # Scan only ADDED lines (leading '+', not the '+++' header). Report the match, never the secret value:
-  # truncate at the ':'/'=' delimiter and append a redaction marker. POSIX ERE + `grep -iE` (no PCRE).
+# The regex floor — used when gitleaks is absent OR when a gitleaks invocation isn't understood (so a
+# CLI/version mismatch degrades honestly instead of false-failing). Scans only ADDED lines and redacts
+# the value (truncate at ':'/'='). POSIX ERE + `grep -iE` (no PCRE — unavailable on macOS).
+regex_scan() {
+  scan_state="REGEX"
   hits="$("${content_cmd[@]}" 2>/dev/null | grep -E '^\+' | grep -vE '^\+\+\+' \
           | grep -iE "$SECRET_RE" 2>/dev/null | sed -E 's/([:=]).*/\1 [redacted]/' || true)"
   if [ -n "$hits" ]; then
@@ -122,6 +111,37 @@ else
   else
     ok "regex secret scan: no obvious secret assignments in added lines"
   fi
+}
+
+# 3) Secret CONTENT scan — gitleaks if usable, else the regex floor. Disclose which ran.
+scan_state="REGEX"
+if command -v gitleaks >/dev/null 2>&1; then
+  # Pick the subcommand by capability: gitleaks >=8.19 has `git` (and deprecates detect/protect); older
+  # gitleaks only has detect/protect. Probe with --help so we never guess from a version string.
+  if gitleaks git --help >/dev/null 2>&1; then
+    if [ "$mode" = "commit" ]; then gl_cmd=(gitleaks git --staged --redact --no-banner .)
+    else gl_cmd=(gitleaks git --redact --no-banner --log-opts="${base}..HEAD" .); fi
+  else
+    if [ "$mode" = "commit" ]; then gl_cmd=(gitleaks protect --staged --redact --no-banner)
+    else gl_cmd=(gitleaks detect --redact --no-banner --log-opts="${base}..HEAD"); fi
+  fi
+  # Classify by OUTPUT, not exit code (gitleaks uses 1 for both "leaks found" and some usage errors):
+  # "no leaks" -> clean; "leaks found" -> real finding; anything else -> unrecognized, degrade to regex.
+  gl_out="$("${gl_cmd[@]}" 2>&1)"
+  gl_low="$(printf '%s' "$gl_out" | tr '[:upper:]' '[:lower:]')"
+  case "$gl_low" in
+    *"no leaks found"*|*"no leaks were found"*)
+      scan_state="GITLEAKS"; ok "gitleaks: no secrets ($mode)" ;;
+    *"leak"*"found"*|*"leaks found"*)
+      scan_state="GITLEAKS"; bad "gitleaks flagged secrets (values redacted):"
+      printf '%s\n' "$gl_out" | sed 's/^/        /' ;;
+    *)
+      note "gitleaks present but its output wasn't understood (version/flags) — DEGRADED to regex floor"
+      regex_scan ;;
+  esac
+else
+  note "gitleaks not installed — DEGRADED to regex secret scan (install gitleaks for a real scan)"
+  regex_scan
 fi
 
 # 4) push only — require a clean worktree before publishing.

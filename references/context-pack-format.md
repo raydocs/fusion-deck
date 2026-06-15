@@ -110,7 +110,9 @@ keep it separate from "what to do" so it doesn't anchor the consumer.
 
 ## Safety
 Before emitting, scan for secrets and drop/redact them — see `references/safety.md`. Never include `.env`,
-API keys, tokens, credentials, or private absolute paths in a pack.
+API keys, tokens, credentials, or private absolute paths in a pack. Also honor a repo-local
+**`.fusionignore`** (gitignore-style, `!` force-includes): drop any matched file from the pack — this
+applies to **both** the mechanical builder and the `--discover` path (where it's the linter's S012 gate).
 
 Persist the pack to a real file (default `docs/context-packs/<slug>.md`) so it's inspectable and
 re-openable by path. See `examples/context-pack.example.md`.

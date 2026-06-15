@@ -18,6 +18,11 @@ Find what's relevant with Grep/Glob/Read. Gather **what exists** — files, key 
 and **do not** prescribe a solution; the pack must not anchor the consumer. Bias to **inclusion** when
 selecting (keep related files; prune only the clearly-unrelated), but to **concision** in any prose.
 
+If the repo has a **`.fusionignore`** (gitignore-style; a leading `!` force-includes), honor it here too:
+**drop any matched file from the pack** even if it looks relevant — same exclusion the `--discover` linter
+enforces as S012, just applied by hand in the mechanical path. It keeps big vendored/build/generated dirs
+out of every pack while `!` keeps must-have docs in.
+
 ## Step 2 — Assign a density tier per file
 
 - **Full content** — true edit targets only.
