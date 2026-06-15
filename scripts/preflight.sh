@@ -66,6 +66,12 @@ else
   echo "PREFLIGHT_STATE=FAIL"; exit 2
 fi
 
+# Push mode with no resolvable base: we already reported the reason — bail cleanly rather than run
+# `git diff "" HEAD` and spew git errors into the whitespace/secret checks.
+if [ "$mode" = "push" ] && [ -z "$base" ]; then
+  echo "PREFLIGHT_SECRETSCAN=SKIPPED"; echo "PREFLIGHT_STATE=FAIL"; exit 1
+fi
+
 # Portable array fill (no `mapfile` — macOS ships bash 3.2, which lacks it; mirror the codebase's read loops).
 changed=()
 while IFS= read -r _line; do
@@ -76,11 +82,9 @@ if [ "${#changed[@]}" -eq 0 ]; then
 fi
 
 # 1) Whitespace / conflict-marker damage.
-if [ "$fail" -eq 0 ] || true; then
-  if "${check_cmd[@]}" >/tmp/pfo_preflight_ws.txt 2>&1; then ok "whitespace clean ($mode)"
-  else bad "whitespace/conflict-marker issues:"; sed 's/^/        /' /tmp/pfo_preflight_ws.txt; fi
-  rm -f /tmp/pfo_preflight_ws.txt
-fi
+if "${check_cmd[@]}" >/tmp/pfo_preflight_ws.txt 2>&1; then ok "whitespace clean ($mode)"
+else bad "whitespace/conflict-marker issues:"; sed 's/^/        /' /tmp/pfo_preflight_ws.txt; fi
+rm -f /tmp/pfo_preflight_ws.txt
 
 # 2) Secret FILENAME deny-globs on the changed file list. Guard the expansion — an empty array under
 # `set -u` is an "unbound variable" error in bash 3.2.

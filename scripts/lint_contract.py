@@ -84,6 +84,14 @@ DANGEROUS_VAGUE_PATTERNS = [
     (re.compile(r"差不多就行"),                                       "vague success ('差不多就行')"),
 ]
 
+# A C009 phrase preceded by a negator is a PROHIBITION, not a grant — e.g. "do not edit anything outside
+# app/" is a good Boundary, not unbounded permission. Skip a match when a negator appears before it on the
+# line. (qiaomu's linter never needs this because it only ever scans a grant; a fusion-deck contract's
+# Boundaries/Constraints legitimately negate these phrases.)
+NEGATION_RE = re.compile(
+    r"(?i)\b(do not|don't|never|avoid|without|must not|cannot|can't|may not|forbid\w*|prohibit\w*|no\b)"
+    r"|不要|不得|不准|禁止|严禁|别|勿")
+
 RULES = {
     "C001": "missing required section",
     "C002": "no work items found under Work Items",
@@ -190,7 +198,11 @@ def lint(path: str) -> int:
         if GOAL_RE.search(line):
             errors.append(f"C005 line {i}: {RULES['C005']} -> {line.strip()!r}")
         for rx, label in DANGEROUS_VAGUE_PATTERNS:
-            if rx.search(line):
+            m = rx.search(line)
+            if m:
+                # A negated phrase ("do not edit anything", "禁止随便改") is a prohibition — that's GOOD.
+                if NEGATION_RE.search(line[:m.start()]):
+                    continue
                 errors.append(f"C009 line {i}: {RULES['C009']} — {label} -> {line.strip()!r}")
                 break   # one C009 per line is enough signal; don't spam multiple labels for one line
 

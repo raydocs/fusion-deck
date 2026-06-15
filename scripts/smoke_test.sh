@@ -127,6 +127,14 @@ if python3 "$root/scripts/lint_contract.py" "$c009_fixture" >/dev/null 2>&1; the
   bad "lint should REJECT dangerous vague language (C009: 'keep trying' / 'until it looks good')"
 else ok "lint REJECTS dangerous vague language (C009)"; fi
 rm -f "$c009_fixture"
+# C009 negation guard — a PROHIBITION ("do not edit anything outside app/") must NOT trip C009.
+c009_neg="$(mktemp /tmp/pfo_c009neg.XXXXXX.md)"
+cat "$root/examples/workflow-contract.example.md" > "$c009_neg"
+printf '\n- Boundary: do not edit anything outside `app/`; never change whatever is in vendor/.\n' >> "$c009_neg"
+if python3 "$root/scripts/lint_contract.py" "$c009_neg" >/dev/null 2>&1; then
+  ok "C009 negation guard: a prohibition ('do not edit anything') is allowed"
+else bad "C009 false-positive: a negated prohibition tripped C009"; fi
+rm -f "$c009_neg"
 
 echo "-- codemap honest-degrade --"
 cm="$(FUSION_CODEMAP_TIER=regex bash "$root/scripts/codemap.sh" "$root/scripts/lint_contract.py" 2>/dev/null)"
@@ -216,6 +224,16 @@ if ( cd "$pf_tmp" && git init -q && git config user.email t@t && git config user
   pf2="$(cd "$pf_tmp" && bash "$root/scripts/preflight.sh" commit 2>/dev/null)"
   echo "$pf2" | grep -q '^PREFLIGHT_SECRETSCAN=' && ok "preflight discloses PREFLIGHT_SECRETSCAN tier" || bad "preflight missing PREFLIGHT_SECRETSCAN"
   echo "$pf2" | grep -q '^PREFLIGHT_STATE=PASS'  && ok "preflight PASSES a clean empty index"          || bad "preflight should PASS a clean empty index"
+  # Discriminating check: a STAGED secret (file + content) must FAIL, and the value must NOT leak.
+  # Build the secret keyword by concatenation so THIS scanner's own source file doesn't trip the regex
+  # floor (the runtime still writes a real secret assignment into the temp repo that preflight scans).
+  _k="api""_key"
+  ( cd "$pf_tmp" && printf '%s = "sk-LEAKED-VALUE-9999"\n' "$_k" > config.py && printf 'X=1\n' > .env && git add config.py .env ) 2>/dev/null
+  pf3="$(cd "$pf_tmp" && bash "$root/scripts/preflight.sh" commit 2>/dev/null)"; pf3_rc=$?
+  if [ "$pf3_rc" -eq 1 ] && echo "$pf3" | grep -q '^PREFLIGHT_STATE=FAIL'; then ok "preflight FAILS on a staged secret + .env file"
+  else bad "preflight should FAIL on a staged secret (rc=$pf3_rc)"; fi
+  if echo "$pf3" | grep -q 'LEAKED-VALUE'; then bad "preflight LEAKED the secret value into output"
+  else ok "preflight redacts the secret value (no leak)"; fi
 else echo "  note  SKIP preflight in-repo check (git init unavailable)"; fi
 rm -rf "$pf_tmp"
 
