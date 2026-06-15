@@ -83,6 +83,7 @@ gen_wrapper fusion-orchestrate "Decompose a task, dispatch scoped subagents, ver
 gen_wrapper fusion-optimize    "Measure→change→re-measure loop; baseline first, one attributed change per iteration, the panel calls continue/stop." "<metric + scope + stop criterion> [--cap N]"
 gen_wrapper fusion-refactor    "Analyze structure, plan behavior-preserving steps, steer one agent through them (structure, not behavior)." "<files, directory, or system>"
 gen_wrapper fusion-handoff     "Emit a Handoff Capsule (purpose, summary, files, verification, risks, next steps)." "<what to hand off>"
+gen_wrapper fusion-remind      "Re-anchor a drifting session: a one-screen cheat-sheet of which fusion command fits which situation, plus the invariants." "[a situation to route]"
 
 echo
 echo "-- panel availability on this machine --"
@@ -90,7 +91,7 @@ bash "$src/scripts/detect_panel.sh" || true
 echo
 echo "Done. Reload in Claude Code with /reload-skills (or restart). Then these slash commands work:"
 echo "      /fusion-review  /fusion-investigate  /fusion-plan  /fusion-context"
-echo "      /fusion-orchestrate  /fusion-optimize  /fusion-refactor  /fusion-handoff"
+echo "      /fusion-orchestrate  /fusion-optimize  /fusion-refactor  /fusion-handoff  /fusion-remind"
 echo "      Plain fusion: use the existing /fusion skill, or invoke /fusion-deck."
 echo "      Offline self-check anytime:  bash \"$src/scripts/smoke_test.sh\""
 echo "      For the PREMIUM triple panel, install the codex and gemini CLIs (see detect_panel output)."

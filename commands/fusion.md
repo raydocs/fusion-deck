@@ -60,3 +60,12 @@ panelist that ran code or read a primary source over one reasoning from memory.
 Lead with the **final deliverable**, then the audit trail (Track A: what each candidate did when run +
 merge rationale + what you verified; Track B: the five-section analysis). **Disclose the realized
 `PANEL_STATE`** and which panelists participated. If the panel degraded, say so and how to enable PREMIUM.
+
+If `$ARGUMENTS` contains `--export`, also persist the final deliverable to a repo-local file and return
+the path so the next step can consume it by path (see `references/export.md`):
+
+```bash
+p=$(bash <skill-root>/scripts/fusion_export.sh path fusion "<the question>")  # -> .fusion/exports/…
+```
+
+Run the `safety.md` secret scan before writing. Present both the answer and the path.

@@ -16,6 +16,12 @@ never silently — and say so in the pack's `meta_prompts`.
 large or unfamiliar repo where the right files aren't obvious; skip it when you already know the targets —
 the mechanical default is faster and just as honest.
 
+**Clarify gate (before spending the subagent).** If the *task itself* is ambiguous enough that discovery
+couldn't tell relevant files from irrelevant ones — a load-bearing ambiguity — surface **one specific,
+evidence-grounded question** with 2–4 concrete options and **halt** rather than launching a discovery pass
+that curates toward a guess. A discovery run aimed at the wrong intent just launders that guess into the
+pack. Ask only when it's load-bearing; otherwise state the assumption and proceed.
+
 ## Step 1 — Explore (the subagent)
 
 Dispatch ONE scoped Explore/general-purpose subagent (`Agent`/`Task` tool). Its brief: given the task,
@@ -78,6 +84,10 @@ Field rules (enforced by the linter — `scripts/selection_lint.py` is the sourc
   reviewable record of what discovery *didn't* trust.
 - Any `path` matching a secrets deny-pattern (`.env*`, `*.pem`, `*.key`, `id_rsa*`, `credentials*`,
   `secrets*`, `*.p12`, `*.keystore`) is **blocked** (`safety.md`).
+- Any `path` excluded by a repo-local **`.fusionignore`** (gitignore-style; a leading `!` force-includes)
+  is **dropped — `S012`** — even with valid evidence. This lets a repo declare big vendored/build/generated
+  dirs that should never enter a pack, while `!` keeps must-have docs in. The linter finds `.fusionignore`
+  by walking up from the manifest to the repo root (a `.git` dir), so one file at the root covers the repo.
 
 ## Step 3 — Validate (the gate runs here)
 

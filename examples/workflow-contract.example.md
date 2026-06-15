@@ -23,6 +23,19 @@ What is currently true (the ledger — distinct from the Objective above):
 - There is no `/health` route and no `app/handlers/health.py`.
 - `tests/` has no health test. Last validation: `pytest -q` green at HEAD.
 
+## Constraints
+
+Invariants that must not change:
+
+- Public API of existing routes (`/users`, `/orders`) and their response shapes — unchanged.
+- No new third-party dependencies; no change to the router's registration mechanism.
+- Work on the current branch only; do not touch secrets or CI config.
+
+## Boundaries
+
+- May write: `app/handlers/health.py` (new), `app/router.py`, `tests/test_health.py` (new).
+- Forbidden: `app/handlers/users.py`, `app/handlers/orders.py`, `vendor/`, any generated file.
+
 ## Work Items
 
 ### Item 1 — health handler

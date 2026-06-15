@@ -70,8 +70,9 @@ independent cross-checking changes the answer's risk profile**; everywhere else,
 | `/fusion-optimize` | Measure→change→re-measure loop; the panel calls continue/stop at each decision point. | By exception — only at the stop/continue decision points |
 | `/fusion-refactor` | Structure analysis → behavior-preserving plan → steer-one-agent execution. | No — composes review/plan/orchestrate |
 | `/fusion-handoff` | Emit a Handoff Capsule. | No — summarization |
+| `/fusion-remind` | Re-anchor a drifting session: cheat-sheet of situation→command + the invariants. | No — pure recall |
 
-All nine install as `~/.claude/commands/<name>.md` wrappers (see README → Install); the whole skill is also
+All ten install as `~/.claude/commands/<name>.md` wrappers (see README → Install); the whole skill is also
 invocable as `/fusion-deck`. (If a separate skill named `fusion` is also installed, that
 skill takes precedence for `/fusion` — this skill does not assume one is present.)
 
@@ -95,6 +96,7 @@ factual question, just answer directly — don't route a trivial ask into a pane
 | asking to make something measurably faster / smaller / cheaper | `/fusion-optimize` |
 | asking to clean up or consolidate code without changing behavior | `/fusion-refactor` |
 | wrapping up and passing work on (to another agent or future-them) | `/fusion-handoff` |
+| drifting in a long session / a fresh agent needs the map and the invariants | `/fusion-remind` |
 
 Compose, don't silo: a feature is usually `/fusion-plan → /fusion-context → /fusion-orchestrate →
 /fusion-handoff`; a bug is `/fusion-investigate → /fusion-plan → /fusion-orchestrate`. If two fit, prefer

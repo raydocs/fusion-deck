@@ -25,7 +25,12 @@ When done, report: the files you changed and one line of evidence per Done-when.
 ## Include / don't-include
 
 **Include:** the goal, the relevant file paths, and discoveries from planning the agent couldn't find on
-its own. For a small task, add "skip deep review / oracle steps."
+its own. For a small task, add "skip deep review / oracle steps." If a judged plan or panel answer was
+exported to a file (`references/export.md`), **point the brief at that path** ("Read the export at
+`.fusion/exports/…` first") instead of pasting its content — a path is the cleanest discovery and doesn't
+drift. If the contract has **Constraints / Boundaries** sections (`workflow-contract.md`), copy the
+relevant ones into the brief verbatim — the worker must inherit the negative space (what not to change,
+where not to write), not just the goal.
 
 **Don't include:** project conventions already in `CLAUDE.md`/`AGENTS.md` (agents read those themselves),
 step-by-step micro-instructions, code the agent can read itself, or any user↔orchestrator chatter.
@@ -45,6 +50,22 @@ Another agent is concurrently working on <sibling task> in <modules>. Avoid modi
 area. If you find yourself blocked by or conflicting with that work, stop and report back rather than
 pushing through.
 ```
+
+## The implementer works blind — resolve every decision
+
+A dispatched subagent (and a blind panelist) **cannot ask you a clarifying question** — it runs from the
+brief alone. So the brief, and the plan it points at, must leave nothing load-bearing unresolved. Borrowed
+from RepoPrompt CE's architect constraint, state it plainly in the brief when the work has real design
+latitude:
+
+> The implementer will work from this brief without asking clarifying questions, so every design decision
+> must be resolved, every touched component identified, and every behavioral change specified precisely.
+
+If you *can't* resolve a decision, that's a signal the **plan** isn't ready — run the `/fusion-plan`
+clarify gate first, don't push an ambiguous brief and hope. And "resolve every decision" never means
+*fabricate*: in an unfamiliar domain (medical, legal, financial, compliance, an unknown data format), the
+resolution is to **inspect authoritative evidence or pause** — never invent a domain rule. Pair an
+ambiguous high-risk item with a Discovery Gate (`commands/fusion-plan.md`), not a confident guess.
 
 ## Scoping patterns (pick by size)
 - **Paraphrase** — small self-contained work: describe it inline; don't pass the whole plan.

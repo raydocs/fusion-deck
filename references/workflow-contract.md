@@ -48,6 +48,26 @@ The pause conditions — the honesty path for impossible/contradictory/scope-cha
 The narrowest concrete probe per work item — the exact grep / file read / single test to run after that
 item, **before** dispatching the next. (See `verifier-prompt-template.md`.)
 
+## Recommended sections (optional, but strongly advised for anything risky)
+
+Borrowed from qiaomu-goal-meta's split of *what must not change* vs *where the agent may write*. The
+linter does not require them (existing contracts don't break), but include them whenever the work touches
+shared APIs, data, or a blast-radius bigger than a couple of files — they are what keep a blind subagent
+from quietly expanding scope.
+
+### Constraints
+The **invariants that must not change**: public API signatures, on-disk/data shapes, the dependency set,
+style/lint rules, branch, secrets. One bullet each, or `none`. (Distinct from Finishing Criteria, which is
+what must *become* true.)
+
+### Boundaries
+The **write boundary**: which directories/globs the work may modify, and which paths are **forbidden**
+(e.g. `vendor/`, generated files, another team's module). Pair with `.fusionignore` for the repo-wide
+version. Never "edit anything" — that phrase is a hard lint error (C009).
+
+`/fusion-orchestrate` copies the Constraints + Boundaries into each subagent brief, so a worker inherits
+the negative space, not just the goal.
+
 ## Optional sections
 **References** (`file:line` pointers, links), **Open Questions** (only if they block or shape work),
 **Parent** (a prior contract this one builds on).

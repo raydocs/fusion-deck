@@ -60,6 +60,30 @@ VAGUE_WORDS = ("works", "working", "clean", "good", "nice", "proper", "properly"
 # backtick/paren, not followed by a word char or hyphen) so paths like `runs/goal/` don't false-trip.
 GOAL_RE = re.compile(r"(?<![\w/])/goal(?![\w-])", re.IGNORECASE)
 
+# Dangerous vague language (C009, BLOCKING). Borrowed from qiaomu-goal-meta's lint_goal_command.py: a
+# contract that grants unbounded permission, licenses infinite retry, or defines success by feel directly
+# violates fusion-deck's own invariants — unbounded scope breaks Boundaries/.fusionignore, infinite retry
+# breaks the escape hatch (fail-twice-stop), and "until it looks good" breaks probe-quality.md. These
+# phrases are unambiguous (low false-positive), so unlike the fuzzy VAGUE_WORDS check (advisory W101) they
+# are a hard error. Bilingual (EN + zh) — a Chinese-language contract is caught too. Each entry is
+# (compiled_regex, short_label).
+DANGEROUS_VAGUE_PATTERNS = [
+    (re.compile(r"\bedit anything\b", re.IGNORECASE),                 "unbounded permission ('edit anything')"),
+    (re.compile(r"\bchange (whatever|anything)\b", re.IGNORECASE),    "unbounded permission ('change whatever/anything')"),
+    (re.compile(r"\bwhatever (is )?(needed|necessary|it takes)\b", re.IGNORECASE), "unbounded permission ('whatever is needed')"),
+    (re.compile(r"\bmodify any (file|code)\b", re.IGNORECASE),        "unbounded permission ('modify any file')"),
+    (re.compile(r"\bkeep (trying|going)\b", re.IGNORECASE),           "infinite-retry language ('keep trying/going')"),
+    (re.compile(r"\b(try|retry) until\b", re.IGNORECASE),             "infinite-retry language ('retry until …')"),
+    (re.compile(r"\buntil it (works|looks|seems|feels)\b", re.IGNORECASE), "vague success ('until it works/looks good')"),
+    (re.compile(r"\bmake sure it (just )?works\b", re.IGNORECASE),    "vague success ('make sure it works')"),
+    (re.compile(r"随便(改|弄|搞)"),                                    "unbounded permission ('随便改')"),
+    (re.compile(r"想(改|怎么改)就(改|怎么改)"),                        "unbounded permission ('想改就改')"),
+    (re.compile(r"一直(尝试|试)"),                                    "infinite-retry language ('一直尝试')"),
+    (re.compile(r"直到(满意|可以|好为止|没问题)"),                     "vague success ('直到满意')"),
+    (re.compile(r"(看起来|看上去)(不错|没问题|可以)就行"),             "vague success ('看起来不错就行')"),
+    (re.compile(r"差不多就行"),                                       "vague success ('差不多就行')"),
+]
+
 RULES = {
     "C001": "missing required section",
     "C002": "no work items found under Work Items",
@@ -69,6 +93,7 @@ RULES = {
     "C006": "invalid Status value (must be one of: %s)" % ", ".join(VALID_STATUSES),
     "C007": "[incomplete] work item missing its reason/proof/attempted/impact/next-decision payload",
     "C008": "work item Size must be 'small' or 'large'",
+    "C009": "dangerous vague language (unbounded permission / infinite retry / vague success)",
     "W101": "finishing criterion looks unverifiable (advisory)",
 }
 
@@ -80,6 +105,8 @@ def list_rules() -> None:
     print(f"\nRequired sections : {', '.join(REQUIRED_SECTIONS)}")
     print(f"Work-item fields  : {', '.join(WORK_ITEM_FIELDS)}")
     print(f"Valid statuses    : {', '.join(VALID_STATUSES)}")
+    print("C009 (blocking)   : rejects unbounded-permission / infinite-retry / vague-success phrases,")
+    print("                    bilingual EN+zh (e.g. 'edit anything', 'keep trying', '随便改', '直到满意').")
 
 
 def split_sections(lines: list[str]) -> list[tuple[int, str, list[str]]]:
@@ -158,9 +185,14 @@ def lint(path: str) -> int:
     warnings: list[str] = []
 
     # C005 — forbidden /goal reference, anywhere in the document.
+    # C009 — dangerous vague language, anywhere in the document.
     for i, line in enumerate(lines, 1):
         if GOAL_RE.search(line):
             errors.append(f"C005 line {i}: {RULES['C005']} -> {line.strip()!r}")
+        for rx, label in DANGEROUS_VAGUE_PATTERNS:
+            if rx.search(line):
+                errors.append(f"C009 line {i}: {RULES['C009']} — {label} -> {line.strip()!r}")
+                break   # one C009 per line is enough signal; don't spam multiple labels for one line
 
     # C001 — required sections present.
     present = {}

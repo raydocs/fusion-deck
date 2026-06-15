@@ -86,4 +86,14 @@ Catching drift before the next item builds on a flawed foundation is your value 
 
 When all items resolve, report: per-item outcome (`[done]`/`[blocked]`/`[incomplete]` with detail),
 coordination issues that surfaced, what you verified (the probes you ran), and suggested follow-ups for
-deferred work. Then suggest `/fusion-handoff` to capture the handoff capsule.
+deferred work.
+
+**Ship-gate (if the work produced staged changes):** run the preflight before handing off so leaked
+secrets or whitespace damage are caught at the seam, not after:
+
+```bash
+bash <skill-root>/scripts/preflight.sh commit   # whitespace + staged-index secret scan; honest-degrade w/o gitleaks
+```
+
+Report the realized `PREFLIGHT_SECRETSCAN` (GITLEAKS vs the degraded REGEX floor); a `PREFLIGHT_STATE=FAIL`
+is a gap to surface, not to paper over. Then suggest `/fusion-handoff` to capture the handoff capsule.

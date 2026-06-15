@@ -50,7 +50,9 @@ the distance from intent and makes verification impossible.)
 2. Wait for it to finish.
 3. **Verify against the Done-when with the concrete probe** from the Verifier Plan — a grep / a file read
    / a single focused test. **Not a skim. Never "did you do it?"** If the plan said "all three endpoints"
-   and the agent did two, that's your catch.
+   and the agent did two, that's your catch. The probe must be **discriminating** — it has to fail on the
+   not-done state and pass on the done state; a symbol-presence / no-crash / report-only check is not a
+   probe (see `references/probe-quality.md`).
 4. Update the plan file to record progress (`[doing]`→`[done]`).
 5. Dispatch the next item **fresh**, referencing the updated plan.
 

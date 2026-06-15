@@ -17,8 +17,27 @@ Load `references/workflow-contract.md` (the template + section semantics).
 
 Translate the raw request into the codebase's real nouns with **1–2 navigation calls** (Grep/Glob/Read),
 e.g. "add retry logic to the API layer" → "add retry to `NetworkService`, mirror `APIClient` auth-retry".
-Gather **what exists** (facts/relationships) and keep it separate from **what to do**. If still ambiguous
-after 2 calls, ask the user one narrow question rather than guessing.
+Gather **what exists** (facts/relationships) and keep it separate from **what to do**.
+
+**Clarify gate (defaults-first; ask only on load-bearing ambiguity; then halt).** Never halt empty-handed
+and never silently guess. Two cases:
+
+- **Low-risk ambiguity** (wouldn't change cost, risk, ownership, or product direction): pick the
+  conservative default, **record it in Current State as a one-line assumption**, and proceed. Don't
+  interrupt for it.
+- **Load-bearing ambiguity** (guessing wrong sends the plan the wrong way): still emit your **best-guess
+  complete draft**, then ask up to **3 batched, numbered decisions**, each grounded in what you found and
+  each with a **marked `(default)`** — so the user can accept everything in one token. Then **halt and
+  wait.** Example:
+
+  ```
+  1. Scope: (A) auth/ only (default)  (B) auth/ + billing/
+  2. Storage: (A) reuse Postgres (default)  (B) add Redis
+  Reply `use defaults` / `按默认`, or e.g. `1B 2A`.
+  ```
+
+  Use `AskUserQuestion` if available. Ask **only** decisions that independently cross the
+  cost/risk/ownership/direction bar — not generic "what do you want?".
 
 ## Step 2 — Write the contract
 
@@ -29,6 +48,10 @@ path the user gives) with these sections (see `references/workflow-contract.md`)
 - **Finishing Criteria** — concrete, *verifiable* signals (a test, a grep, an observable output) — not
   "works" / "clean".
 - **Current State** — the ledger: what is currently true, distinct from the objective.
+- **Constraints** *(recommended)* — invariants that must NOT change (public APIs, data shapes, deps, style,
+  branch, secrets), one bullet each or `none`.
+- **Boundaries** *(recommended)* — the write boundary: dirs/globs the work may modify and the **forbidden**
+  paths. Never "edit anything" (a hard lint error). Pairs with `.fusionignore`.
 - **Work Items** — each a `###` subsection with `Goal / Done-when / Key files / Dependencies / Size /
   Status`. Decompose to **natural granularity (2–3 items, cap 5)**; combine if you reach for more.
 - **Escape Hatch** — the pause conditions (validation contradicts the goal, repo disagrees with the plan,
@@ -37,6 +60,25 @@ path the user gives) with these sections (see `references/workflow-contract.md`)
 - (optional) **References** — `file:line` pointers, links.
 
 Use the honest status vocabulary `[todo]/[doing]/[done]/[blocked]/[incomplete]/[abandoned]`.
+
+**Discovery-first for unfamiliar / high-risk domains.** If the task sits in a domain you can't ground from
+the repo alone — medical, legal, financial, security/compliance, tax, a complex data format, copyrighted
+assets, or a production/destructive operation — make the **first Work Item a Discovery Gate** rather than
+guessing:
+
+```
+### W0 — Discovery Gate
+- Goal: inspect the authoritative context before any change.
+- Done-when: authoritative sources inspected (project docs / sample data / official references), working
+  assumptions listed, and any claim not supported by inspected evidence removed.
+- Key files: <docs, schemas, sample data>.
+- Dependencies: none.  Size: small.  Status: [todo]
+```
+
+Every implementation item then **depends on W0**. Add a standing line to **Constraints**: *"Do not invent
+domain rules, compliance claims, or data semantics not supported by inspected evidence — inspect or pause,
+never fabricate."* This is the counterweight to the blind-implementer rule: resolve every decision, but in
+an unfamiliar domain "resolve" means *go look*, not *make it up*.
 
 ## Step 3 — Lint
 
@@ -63,9 +105,13 @@ For a high-stakes design where you want a polished plan document:
    user doesn't answer: hands-off. **Honor the choice** — if they picked a checkpoint, pause there and
    wait; never silently demote them.
 2. **Explore the seams**, then draft the contract (Steps 1–2).
-3. **Critique pass** — dispatch one critic subagent (or `--panel`) scoped to the top under-specified
-   seams, contradictions, over-planning to cut, and the questions that would change the order. Fold it in
-   so the plan gets **shorter and sharper** — a plan should shrink as it matures.
+3. **Critique pass (bounded)** — dispatch one critic subagent (or `--panel`). Its output is capped at
+   **≤1 page** and covers ONLY these four buckets: (a) top-3 under-specified seams (`file:line`); (b)
+   contradictions or missing dependencies; (c) **risk of over-planning — which sections to cut**; (d) the
+   questions whose answers would change implementation order. **Hard rule: the critique may not expand
+   scope and may not rewrite the plan — prefer deletion or clarification over adding detail.** Don't fold
+   the critique text itself into the plan; it *informs your edits*. Fold its conclusions in so the plan
+   gets **shorter and sharper** — a plan should shrink as it matures.
 
 Deep mode still emits a lint-passing Workflow Contract (Step 3); it is **not** a Codex `/goal`.
 
@@ -73,3 +119,7 @@ Deep mode still emits a lint-passing Workflow Contract (Step 3); it is **not** a
 
 The contract path + a one-paragraph summary (objective, item count, the riskiest item). Then suggest
 `/fusion-orchestrate <contract-path>` to execute it.
+
+The lint-passing contract is already a real file (`docs/plans/…`), so it threads to `/fusion-orchestrate`
+by path with no extra step — that command reads the contract directly. (`references/export.md` documents
+the same path-not-inline discipline for the panel commands.)

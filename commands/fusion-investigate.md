@@ -25,8 +25,10 @@ separate from "what might cause it." Start the report file (default `docs/invest
 Dispatch `Explore`/`general-purpose` subagents to collect a concrete **evidence ledger**: the call path,
 the offending `file:line`, git blame/diff, logs, the failing test. Each entry is a fact with a location,
 not an opinion. For a big or unfamiliar surface, build a pack first with `/fusion-context` (read
-`<skill-root>/commands/fusion-context.md`). Append findings to the report and mark each hypothesis the
-evidence **supports / weakens / eliminates**.
+`<skill-root>/commands/fusion-context.md`). When you run several investigators in parallel, give each its
+own `## Findings: <hypothesis>` sub-section in the report to append to (no write contention), then merge
+into the ledger. Append findings to the report and mark each hypothesis the evidence **supports / weakens
+/ eliminates**.
 
 ## Step 3 — Adjudicate (panel, by exception)
 

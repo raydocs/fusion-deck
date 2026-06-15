@@ -49,6 +49,7 @@ RULES = {
     "S009": "selected entry mode=slice without a valid 'lines' range (START-END)",
     "S010": "selected path matches a secrets deny-pattern (.env*/*.pem/*.key/id_rsa*/credentials*/…)",
     "S011": "selected path is not repo-relative (absolute path or '..' traversal)",
+    "S012": "selected path is excluded by .fusionignore and not force-included (! pattern) — dropped",
     "W101": "estimated tokens exceed budget_tokens (advisory; byte/4 heuristic)",
 }
 
@@ -61,6 +62,8 @@ def list_rules() -> None:
     print(f"Deny-patterns   : {', '.join(DENY_GLOBS)}")
     print("Evidence gate   : every selected[] entry needs a non-empty 'reason' AND 'evidence' array")
     print("                  (e.g. 'grep:<match>', 'import:<path>', 'diff', 'test:<name>').")
+    print(".fusionignore   : optional repo-local exclude file (gitignore-ish; '!' force-includes). A")
+    print("                  selected file it excludes is dropped (S012) even with valid evidence.")
 
 
 def is_nonempty_str(value) -> bool:
@@ -91,6 +94,62 @@ def is_unsafe_path(path: str) -> bool:
     if os.path.isabs(p) or (len(p) >= 2 and p[1] == ":"):   # POSIX absolute, or a Windows drive (C:/…)
         return True
     return ".." in p.split("/")
+
+
+def find_fusionignore(manifest_path: str) -> str | None:
+    """Locate a .fusionignore by walking up from the manifest's directory to the repo root (a dir with a
+    .git), capped at 6 levels so a symlinked skill can't reach into $HOME. Returns the path or None."""
+    d = os.path.dirname(os.path.abspath(manifest_path)) or "."
+    for _ in range(6):
+        cand = os.path.join(d, ".fusionignore")
+        if os.path.isfile(cand):
+            return cand
+        if os.path.isdir(os.path.join(d, ".git")):   # repo boundary — stop, don't escape the repo
+            break
+        parent = os.path.dirname(d)
+        if parent == d:                              # filesystem root
+            break
+        d = parent
+    return None
+
+
+def load_ignore_patterns(path: str) -> list[tuple[str, bool]]:
+    """Parse a .fusionignore (gitignore-ish). Returns ordered (pattern, is_negation) tuples. Blank lines
+    and '#' comments are skipped; a leading '!' marks a force-include (negation)."""
+    patterns: list[tuple[str, bool]] = []
+    try:
+        with open(path, encoding="utf-8") as fh:
+            for line in fh:
+                s = line.strip()
+                if not s or s.startswith("#"):
+                    continue
+                neg = s.startswith("!")
+                if neg:
+                    s = s[1:].strip()
+                if s:
+                    patterns.append((s.rstrip("/"), neg))
+    except OSError:
+        return []
+    return patterns
+
+
+def is_ignored(path: str, patterns: list[tuple[str, bool]]) -> bool:
+    """gitignore-style last-match-wins: a later matching rule overrides an earlier one; a '!' rule
+    force-includes. A bare pattern matches the full repo-relative path, its basename, or any path under a
+    matching directory prefix."""
+    p = path.strip().replace("\\", "/").lstrip("./")
+    base = os.path.basename(p)
+    ignored = False
+    for pat, neg in patterns:
+        hit = (
+            fnmatch.fnmatch(p, pat)
+            or fnmatch.fnmatch(base, pat)
+            or fnmatch.fnmatch(p, pat + "/*")   # directory prefix: 'build' matches 'build/x.js'
+            or p == pat
+        )
+        if hit:
+            ignored = not neg
+    return ignored
 
 
 def valid_lines(value) -> bool:
@@ -161,6 +220,11 @@ def lint(path: str) -> int:
         errors.append(f"S004: {RULES['S004']}")
         selected = []
 
+    # S012 input — load repo-local .fusionignore once (if present). Files it excludes are dropped unless
+    # force-included with a '!' rule — a repo-local way to keep big vendored/build dirs out of every pack.
+    ignore_file = find_fusionignore(path)
+    ignore_patterns = load_ignore_patterns(ignore_file) if ignore_file else []
+
     total_est = 0
     for idx, entry in enumerate(selected):
         label = entry_label(idx, entry)
@@ -180,6 +244,11 @@ def lint(path: str) -> int:
         # S011 — repo-relative only: no absolute paths, no '..' traversal (never read outside the repo).
         if epath is not None and is_unsafe_path(epath):
             errors.append(f"S011: '{label}' {RULES['S011']}")
+
+        # S012 — excluded by .fusionignore and not force-included. A selected file the repo says never
+        # belongs in context is a curation error even with valid evidence; '!' in .fusionignore overrides.
+        if epath is not None and ignore_patterns and is_ignored(epath.strip(), ignore_patterns):
+            errors.append(f"S012: '{label}' {RULES['S012']}")
 
         # S006 — reason. THE GATE, part 1.
         if not is_nonempty_str(entry.get("reason")):

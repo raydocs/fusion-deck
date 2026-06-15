@@ -42,6 +42,11 @@ build a pack first with `/fusion-context`. Each brief is read-only and scoped to
 path, a suspect module, the git history of one file. Subagents do **not** spawn their own subagents and do
 **not** edit (one level of fan-out, same as orchestration).
 
+When you run **two or more investigators in parallel** on disjoint hypotheses, avoid write contention on
+the report: give each one its **own sub-section to append to** — `## Findings: <hypothesis-or-trace>` —
+rather than all writing the shared ledger at once. You merge their sub-sections into the single evidence
+ledger when they return. One scaffolded report, per-agent sub-sections, no clobbering.
+
 Everything they return lands in the **evidence ledger** — the spine of the report. Every entry is a
 **fact anchored to a location**, never an opinion:
 
@@ -54,7 +59,9 @@ Everything they return lands in the **evidence ledger** — the spine of the rep
 
 **The gate: no location, not evidence.** "It's probably the cache" is not a ledger entry; "`cache.go:88`
 returns the stale entry because the TTL check uses `<=` not `<`" is. If a claim can't be pinned to a
-`file:line` / commit / test, it stays a hypothesis, not a fact.
+`file:line` / commit / test, it stays a hypothesis, not a fact. When a failing test is the evidence, it
+must be **discriminating** — failing because of *this* cause, not merely red (see
+`references/probe-quality.md`).
 
 After each batch, score every hypothesis against the ledger and record the verdict in the report:
 

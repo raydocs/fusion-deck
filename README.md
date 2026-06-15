@@ -116,6 +116,7 @@ directly; the panel is for the calls where being wrong is expensive.
 | Make something measurably faster or smaller | `/fusion-optimize` | by exception |
 | Clean up structure **without** changing behavior | `/fusion-refactor` | no |
 | Pass work to the next agent (or future-you) | `/fusion-handoff` | no |
+| Re-anchor a drifting session (situation→command + invariants) | `/fusion-remind` | no |
 
 Typical flows: a **feature** is `plan → context → orchestrate → handoff`; a **bug** is
 `investigate → plan → orchestrate`. A one-off hard question is just `/fusion`.
@@ -257,6 +258,7 @@ OpenRouter 的 **DRACO** 深度研究基准 —— 10 个领域、100 道题：
 | 想把啥改得更快 / 更小（数字看得见） | `/fusion-optimize` | 按需 |
 | 只整理结构、**不改**行为 | `/fusion-refactor` | 否 |
 | 把活交给下一个 agent（或明天的你） | `/fusion-handoff` | 否 |
+| 长会话跑偏了，或新 agent 要一眼看清地图和铁律 | `/fusion-remind` | 否 |
 
 常见流程：**功能** = `plan → context → orchestrate → handoff`；**改 bug** = `investigate → plan → orchestrate`。临时一个难问题，直接 `/fusion`。
 

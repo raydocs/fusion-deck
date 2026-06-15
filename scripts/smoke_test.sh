@@ -54,6 +54,7 @@ required=(
   commands/fusion.md commands/fusion-review.md commands/fusion-plan.md
   commands/fusion-context.md commands/fusion-orchestrate.md commands/fusion-handoff.md
   commands/fusion-investigate.md commands/fusion-optimize.md commands/fusion-refactor.md
+  commands/fusion-remind.md
   scripts/assert_triple_panel.sh scripts/detect_panel.sh scripts/run_codex.sh scripts/run_gemini.sh
   scripts/run_triple_fusion.sh scripts/smoke_test.sh scripts/lint_contract.py
   scripts/codemap.sh scripts/selection_lint.py scripts/fusion_worktree.sh
@@ -64,6 +65,8 @@ required=(
   references/safety.md
   references/investigation-rubric.md references/optimize-scoreboard.md references/codemap.md
   references/context-discovery.md references/refactor-recipe.md references/worktrees.md
+  references/reminder.md references/probe-quality.md references/export.md
+  scripts/preflight.sh scripts/fusion_export.sh
   examples/workflow-contract.example.md examples/context-pack.example.md
   examples/fusion-review.example.md examples/subagent-task.example.md examples/handoff.example.md
   examples/selection.example.json
@@ -115,6 +118,15 @@ if python3 "$root/scripts/lint_contract.py" "$bad_fixture" >/dev/null 2>&1; then
   bad "lint should REJECT a contract missing required sections / using /goal"
 else ok "lint REJECTS a malformed contract (missing sections + /goal)"; fi
 rm -f "$bad_fixture"
+# C009 — an otherwise-valid contract with a dangerous vague phrase must be rejected (and the clean
+# example must still pass, i.e. no false-positive — covered by the example-passes check above).
+c009_fixture="$(mktemp /tmp/pfo_c009.XXXXXX.md)"
+cat "$root/examples/workflow-contract.example.md" > "$c009_fixture"
+printf '\n- Note: just keep trying until it looks good.\n' >> "$c009_fixture"
+if python3 "$root/scripts/lint_contract.py" "$c009_fixture" >/dev/null 2>&1; then
+  bad "lint should REJECT dangerous vague language (C009: 'keep trying' / 'until it looks good')"
+else ok "lint REJECTS dangerous vague language (C009)"; fi
+rm -f "$c009_fixture"
 
 echo "-- codemap honest-degrade --"
 cm="$(FUSION_CODEMAP_TIER=regex bash "$root/scripts/codemap.sh" "$root/scripts/lint_contract.py" 2>/dev/null)"
@@ -165,6 +177,47 @@ else
   else bad "run_triple_fusion left stale artifacts ($(ls "$rtf_d" 2>/dev/null | tr '\n' ' '))"; fi
   rm -rf "$rtf_d" "$rtf_p"
 fi
+
+echo "-- selection_lint .fusionignore gate (S012) --"
+fi_tmp="$(mktemp -d /tmp/pfo_fi.XXXXXX)"
+mkdir -p "$fi_tmp/.git" "$fi_tmp/.fusion" "$fi_tmp/build" "$fi_tmp/docs"
+printf 'build\n!build/keep.js\n' > "$fi_tmp/.fusionignore"
+printf 'x\n' > "$fi_tmp/build/x.js"; printf 'k\n' > "$fi_tmp/build/keep.js"
+# An ignored file with valid evidence must be dropped (S012).
+printf '{"task":"t","budget_tokens":1000,"selected":[{"path":"build/x.js","mode":"full","reason":"r","evidence":["grep:x"]}]}\n' > "$fi_tmp/.fusion/sel_bad.json"
+if python3 "$root/scripts/selection_lint.py" "$fi_tmp/.fusion/sel_bad.json" >/dev/null 2>&1; then
+  bad "selection_lint should REJECT a .fusionignore-excluded file (S012)"
+else ok "selection_lint REJECTS a .fusionignore-excluded file (S012)"; fi
+# A force-included (!) file under an ignored dir must pass.
+printf '{"task":"t","budget_tokens":1000,"selected":[{"path":"build/keep.js","mode":"full","reason":"r","evidence":["grep:k"]}]}\n' > "$fi_tmp/.fusion/sel_ok.json"
+if python3 "$root/scripts/selection_lint.py" "$fi_tmp/.fusion/sel_ok.json" >/dev/null 2>&1; then
+  ok "selection_lint ALLOWS a force-included (!) file under an ignored dir"
+else bad "selection_lint should allow a force-included (!) .fusionignore file"; fi
+rm -rf "$fi_tmp"
+
+echo "-- fusion_export path + cleanup --"
+fx="$(bash "$root/scripts/fusion_export.sh" path fusion "Some Task Title!" 2>/dev/null)"
+case "$fx" in
+  .fusion/exports/fusion-*-some-task-title.md) ok "fusion_export path: repo-relative, slugged ($fx)" ;;
+  *) bad "fusion_export path unexpected: '$fx'" ;;
+esac
+if bash "$root/scripts/fusion_export.sh" cleanup 14 >/dev/null 2>&1; then ok "fusion_export cleanup runs (exit 0)"
+else bad "fusion_export cleanup failed"; fi
+
+echo "-- preflight ship-gate --"
+# Outside a git repo: must fail with PREFLIGHT_STATE=FAIL and a usage-class exit (2).
+pf_tmp="$(mktemp -d /tmp/pfo_pf.XXXXXX)"
+pf_out="$(cd "$pf_tmp" && bash "$root/scripts/preflight.sh" commit 2>/dev/null)"; pf_rc=$?
+if [ "$pf_rc" -eq 2 ] && echo "$pf_out" | grep -q '^PREFLIGHT_STATE=FAIL'; then
+  ok "preflight reports FAIL (exit 2) outside a git repo"
+else bad "preflight should FAIL/exit-2 outside a git repo (rc=$pf_rc)"; fi
+# Inside a clean repo with nothing staged: PASS and disclose the secret-scan tier.
+if ( cd "$pf_tmp" && git init -q && git config user.email t@t && git config user.name t ) 2>/dev/null; then
+  pf2="$(cd "$pf_tmp" && bash "$root/scripts/preflight.sh" commit 2>/dev/null)"
+  echo "$pf2" | grep -q '^PREFLIGHT_SECRETSCAN=' && ok "preflight discloses PREFLIGHT_SECRETSCAN tier" || bad "preflight missing PREFLIGHT_SECRETSCAN"
+  echo "$pf2" | grep -q '^PREFLIGHT_STATE=PASS'  && ok "preflight PASSES a clean empty index"          || bad "preflight should PASS a clean empty index"
+else echo "  note  SKIP preflight in-repo check (git init unavailable)"; fi
+rm -rf "$pf_tmp"
 
 echo
 echo "== result: $pass passed, $fail failed =="

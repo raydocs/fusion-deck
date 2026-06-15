@@ -37,7 +37,11 @@ File: path/to/file.py
 
 - **Full content** — true edit targets only.
 - **Line slices** — large, partially relevant files: only the relevant ranges, each labeled before its
-  fence: `(lines 40-90: the auth-retry path)`.
+  fence: `(lines 40-90: the auth-retry path)`. Line numbers **drift** once a file is edited downstream, so
+  if a pack will be re-opened after edits, anchor the slice to content, not just numbers: note a short
+  unique anchor string from the slice's first line (e.g. `(lines 40-90 @ "func retry(" : the auth-retry
+  path)`). On re-build, re-find the anchor and re-slice around it; if the anchor is gone, the slice is
+  stale — regenerate it (or downgrade the file to codemap) rather than pasting now-wrong line ranges.
 - **Codemap** (signatures only) — peripheral orientation files: `Imports:` bullets + class/function/type
   signatures, **no bodies**. Generate with the honest-degrade helper (tree-sitter → ctags → grep; discloses
   `CODEMAP_STATE`):
@@ -48,6 +52,18 @@ File: path/to/file.py
   `grep -nE '^(import |from |class |def |func |type |interface |export )' path/to/file`; ctags and
   tree-sitter are auto-detected upgrades. See `references/codemap.md`.
 - **Tree-only** — the path appears in `file_map`; no content block.
+
+In `file_map`, mark any path that also has a **codemap block** in `file_contents` with a trailing ` +`
+and add one legend line (`(+ denotes code-map available)`), matching RepoPrompt CE's tree annotation — so
+a model reading the pack knows which files it can see signatures for without scanning the whole pack:
+
+```
+src/
+  auth.py +        (codemap below)
+  billing.py       (full content below)
+  util/log.py      (tree-only)
+(+ denotes code-map available)
+```
 
 ## Token budget (enforced)
 
@@ -71,6 +87,22 @@ head -n 120 FILE > part; echo '[content truncated]' >> part; tail -n 120 FILE >>
 ```
 
 Idempotent, so the file still contributes signal without blowing the budget.
+
+### Budget ledger (optional, in `meta_prompts`)
+When a pack is near or over budget, show **what ate the budget** instead of just asserting it fit — a few
+lines in `meta_prompts` make the curation auditable and the next prune obvious:
+
+```
+Budget: 60000 (handoff) · estimated 57.8k used
+By tier:  full 6 files (41k) · slice 3 (9k) · codemap 5 (7.8k) · tree 12 (—)
+Heaviest: src/engine.py 18k (full) · src/api.py 9k (full)
+Decisions: downgraded src/legacy.py full→codemap (-14k); pruned vendor/* (unrelated)
+```
+
+This is RepoPrompt CE's component-breakdown idea (it accounts tokens per section/file) scaled to a skill:
+the cheap `bytes/4` estimate per file, summed by tier, plus the prune/downgrade decisions you made. Skip it
+for small packs comfortably under budget; include it whenever you had to prune to fit, so an over-budget
+result reads as an explained trade-off, not a silent truncation.
 
 ## Un-opinionated discovery
 The pack gathers **what exists** (files, key symbols, relationships) and must **not** propose a solution —

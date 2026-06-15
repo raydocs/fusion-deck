@@ -12,7 +12,9 @@ python3 <skill-root>/scripts/lint_contract.py --list-rules       # print the rul
 Summary of the policy (authoritative version: `--list-rules`):
 
 - **Blocking errors (exit 1):** missing required section; no work items; a work item missing a required
-  field; an empty/placeholder required field; an invalid `Status`; any forbidden `/goal` reference.
+  field; an empty/placeholder required field; an invalid `Status`; any forbidden `/goal` reference;
+  **dangerous vague language** (C009 — unbounded permission like "edit anything", infinite-retry like
+  "keep trying", or vague success like "until it looks good"; bilingual EN + 中文).
 - **Advisory warnings (exit 0):** a finishing criterion that looks unverifiable.
 
 Required sections: Objective · Finishing Criteria · Current State · Work Items · Escape Hatch · Verifier

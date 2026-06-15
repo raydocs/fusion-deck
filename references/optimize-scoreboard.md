@@ -21,7 +21,9 @@ Write down, in this order, before touching code:
 - **Metric** — the one number, with its unit (`p95 request latency, ms`; `wall-clock, s`; `RSS peak, MB`;
   `bundle gzip, KB`). Lower-is-better or higher-is-better — state it.
 - **Probe** — the *exact* command that emits the number, copy-pasteable, deterministic inputs, fixed N. Same
-  machine, same load, same data every run. A probe you can't paste is not a probe.
+  machine, same load, same data every run. A probe you can't paste is not a probe. It must also be a
+  **discriminating** measurement, not an arbitrary-sleep or a no-crash check (see
+  `references/probe-quality.md`); the delta it reports must clear the baseline noise floor to count.
 - **Stop criterion** — the target that ends the loop (`p95 ≤ 200ms`, or `≥ 30% under baseline`), AND the hard
   iteration cap (below). Define "done" before you start so you don't optimize forever chasing noise.
 

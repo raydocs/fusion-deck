@@ -33,6 +33,23 @@ repo, so bundle the ACTUAL materials into the brief: the diff (`git diff <range>
 contents of the target files (or a Context Pack from `/fusion-context`), with line numbers so panelists
 can cite `file:line`. Never pass bare paths — a panelist that can't see the code can't review it.
 
+**Don't ship a diff with no surrounding context.** A reviewer handed only the changed hunks gives generic
+feedback because it can't see how the changed code is *used*. When the target is a diff, also pull the
+**unmodified callers** of the changed symbols so the panel can judge the change against its real
+call-sites:
+
+```bash
+# names of functions/classes/methods touched by the diff, then their call-sites elsewhere in the repo
+syms=$(git diff <range> | grep -E '^\+.*\b(def |func |function |class |fn |sub )' \
+  | grep -oE '\b[A-Za-z_][A-Za-z0-9_]*\b' | sort -u)
+for s in $syms; do grep -rnw --include='*.*' "$s" . | grep -v '^\./.git/'; done
+```
+
+Bundle the signatures of those callers (codemap tier is enough — `bash <skill-root>/scripts/codemap.sh
+<caller-file>`) alongside the diff, so the review balances the patch against the *unmodified* code that
+depends on it. Frame the brief explicitly as a **code review of a change** (use the literal phrase "code
+review" and name the scope token) so panelists analyze the diff, not the file in the abstract.
+
 Give every panelist the **same review brief verbatim** (the packet + the independent-expert instruction
 from `panel-prompt.md`), asking each for findings as a list of `{severity, location (file:line),
 evidence, why it matters, suggested fix}`. Ask for correctness/security/edge-case bugs **and** reuse /
@@ -63,3 +80,12 @@ dump): lead with **≤5 Must-fix** (each: severity, `file:line`, evidence, concr
 Suggestions**, then **≤3 Questions**, ordered consensus-first. Then the five-section audit trail.
 **Disclose the realized `PANEL_STATE`** (read it from the manifest). Do not auto-apply fixes unless the
 user asks — this command reviews.
+
+If `$ARGUMENTS` contains `--export`, also persist the findings report to a repo-local file and return the
+path so a follow-up fix or hand-off reads it by path (see `references/export.md`):
+
+```bash
+p=$(bash <skill-root>/scripts/fusion_export.sh path review "<the review scope>")  # -> .fusion/exports/…
+```
+
+Run the `safety.md` secret scan before writing.

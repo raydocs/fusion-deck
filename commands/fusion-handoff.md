@@ -29,7 +29,11 @@ Write to a unique repo-local file `handoffs/<YYYY-MM-DD>-<HH-MM>-<type>-<slug>.m
 - **Summary** — what was done / decided, in your own voice.
 - **Files Created / Changed** — paths, each with a one-line "what & why" and `file:line` where useful.
 - **Verification Results** — what you ran and what you observed (commands + outcomes). Report failures and
-  skips honestly; mark anything unverified.
+  skips honestly; mark anything unverified. **If the handed-off work includes code that will be
+  committed/pushed, run the ship-gate first** and record its result here:
+  `bash <skill-root>/scripts/preflight.sh commit` (or `push <base>`) — whitespace + staged-index secret
+  scan, honest-degrade to a regex floor without `gitleaks`. Note the realized `PREFLIGHT_SECRETSCAN`; a
+  `FAIL` is a known risk the next person must clear, not something to bury.
 - **Known Risks** — what's fragile, assumed, or unproven; anything that could bite the next person.
 - **Next Steps** — the concrete next actions, ordered; open questions **only if** they block or shape the
   next move.
