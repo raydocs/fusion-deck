@@ -39,7 +39,7 @@ conclusion):
 
 ## Panel composition per PANEL_STATE / slug
 
-- `PREMIUM` (`opus4.8-gpt5.5-gemini3.1pro`) — Opus 4.8 + GPT-5.5 (codex) + Gemini 3.1 Pro (gemini), blind
+- `PREMIUM` (`opus4.8-gpt5.5-gemini3.1pro`) — Opus 4.8 + GPT-5.5 (codex) + Gemini 3.1 Pro (`agy` by default), blind
   and parallel, then Opus judges.
 - `DEGRADED_OPUS_GPT5` (`opus4.8-gpt5.5`) — Opus 4.8 + GPT-5.5.
 - `DEGRADED_OPUS_GEMINI` (`opus4.8-gemini3.1pro`) — Opus 4.8 + Gemini 3.1 Pro.

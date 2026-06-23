@@ -18,6 +18,7 @@
 set -uo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$here/gemini_backend.sh"
 prompt_file="${1:?usage: run_triple_fusion.sh <prompt_file> <out_dir> [reasoning_effort]}"
 out_dir="${2:?usage: run_triple_fusion.sh <prompt_file> <out_dir> [reasoning_effort]}"
 effort="${3:-medium}"
@@ -49,19 +50,13 @@ codex_pid=""; gemini_pid=""
 
 # Same bounded availability check as the gate (assert_triple_panel.sh), so launch decisions agree with it
 # and a hung CLI can't wedge this script either. Portable timeout (timeout/gtimeout, else bash watchdog).
-_bounded() {
-  if command -v timeout  >/dev/null 2>&1; then timeout  5 "$@"; return $?; fi
-  if command -v gtimeout >/dev/null 2>&1; then gtimeout 5 "$@"; return $?; fi
-  "$@" & _bp=$!; ( sleep 5; kill -9 "$_bp" 2>/dev/null ) & _bw=$!
-  wait "$_bp" 2>/dev/null; _brc=$?; kill "$_bw" 2>/dev/null; wait "$_bw" 2>/dev/null; return "$_brc"
-}
-have() { command -v "$1" >/dev/null 2>&1 && _bounded "$1" --version >/dev/null 2>&1; }
+have() { fusion_cli_available "$1"; }
 
 if have codex; then
   ( bash "$here/run_codex.sh" "$prompt_file" "$codex_out" "$effort" ) > "$out_dir/codex.log" 2>&1 &
   codex_pid=$!
 fi
-if have gemini; then
+if fusion_detect_gemini_backend; then
   ( bash "$here/run_gemini.sh" "$prompt_file" "$gemini_out" ) > "$out_dir/gemini.log" 2>&1 &
   gemini_pid=$!
 fi
@@ -93,7 +88,12 @@ manifest="$out_dir/manifest.txt"
   echo "TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   echo "PROMPT_FILE=$prompt_file"
   echo "CODEX_MODEL=${FUSION_CODEX_MODEL:-codex-default}"
-  echo "GEMINI_MODEL=${FUSION_GEMINI_MODEL:-gemini-3.1-pro-preview}"
+  echo "GEMINI_BACKEND=${FUSION_GEMINI_BACKEND_RESOLVED:-none}"
+  if [ "${FUSION_GEMINI_BACKEND_RESOLVED:-}" = "antigravity" ]; then
+    echo "GEMINI_MODEL=${FUSION_ANTIGRAVITY_MODEL:-Gemini 3.1 Pro (High)}"
+  else
+    echo "GEMINI_MODEL=${FUSION_GEMINI_MODEL:-gemini-3.1-pro-preview}"
+  fi
   echo "CODEX_OUT=$codex_out CODEX_RC=$codex_rc"
   echo "GEMINI_OUT=$gemini_out GEMINI_RC=$gemini_rc"
   echo "# NOTE: Opus 4.8 panelist + judge are added by the orchestrator, not this script."

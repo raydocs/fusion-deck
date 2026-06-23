@@ -17,7 +17,7 @@ set -uo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 root="$(cd "$here/.." && pwd)"
 root_name="$(basename "$root")"
-# Absolute path to bash, so we can run a script with an emptied PATH (hiding codex/gemini) while bash
+# Absolute path to bash, so we can run a script with an emptied PATH (hiding codex/gemini/agy) while bash
 # itself is still found — a prefix `PATH=/nonexistent bash …` would fail to locate bash (exit 127).
 sh_bin="$(command -v bash)"
 
@@ -55,7 +55,8 @@ required=(
   commands/fusion-context.md commands/fusion-orchestrate.md commands/fusion-handoff.md
   commands/fusion-investigate.md commands/fusion-optimize.md commands/fusion-refactor.md
   commands/fusion-remind.md
-  scripts/assert_triple_panel.sh scripts/detect_panel.sh scripts/run_codex.sh scripts/run_gemini.sh
+  scripts/assert_triple_panel.sh scripts/detect_panel.sh scripts/gemini_backend.sh
+  scripts/run_codex.sh scripts/run_gemini.sh scripts/run_antigravity.sh
   scripts/run_triple_fusion.sh scripts/smoke_test.sh scripts/lint_contract.py
   scripts/codemap.sh scripts/selection_lint.py scripts/fusion_worktree.sh
   references/panel-prompt.md references/judge-rubric.md references/workflow-contract.md
@@ -97,6 +98,7 @@ echo "-- detect_panel output --"
 dp="$(bash "$root/scripts/detect_panel.sh" 2>/dev/null)"
 echo "$dp" | grep -q '^PANEL_STATE=' && ok "detect_panel prints PANEL_STATE" || bad "detect_panel missing PANEL_STATE"
 echo "$dp" | grep -q '^SLUG='        && ok "detect_panel prints SLUG"        || bad "detect_panel missing SLUG"
+echo "$dp" | grep -q '^GEMINI_BACKEND=' && ok "detect_panel prints GEMINI_BACKEND" || bad "detect_panel missing GEMINI_BACKEND"
 
 echo "-- assert_triple_panel gate (simulated, no CLIs on PATH) --"
 # Hard-fail when premium unavailable and no override: must exit non-zero.
@@ -107,6 +109,54 @@ else ok "assert hard-fails (exit non-zero) when premium unavailable"; fi
 deg="$(FUSION_ALLOW_DEGRADED=1 PATH=/nonexistent "$sh_bin" "$root/scripts/assert_triple_panel.sh" 2>/dev/null)"; deg_rc=$?
 if [ "$deg_rc" -eq 0 ] && echo "$deg" | grep -q '^DEGRADED=1'; then ok "assert allows explicit degrade (FUSION_ALLOW_DEGRADED=1)"
 else bad "assert degrade-override broken (rc=$deg_rc)"; fi
+
+echo "-- Gemini backend selection (simulated CLIs) --"
+gb_tmp="$(mktemp -d /tmp/pfo_gb.XXXXXX)"
+cat > "$gb_tmp/codex" <<'EOF'
+#!/usr/bin/env bash
+if [ "${1:-}" = "--version" ]; then echo "codex fake"; exit 0; fi
+exit 1
+EOF
+cat > "$gb_tmp/gemini" <<'EOF'
+#!/usr/bin/env bash
+if [ "${1:-}" = "--version" ]; then echo "gemini fake"; exit 0; fi
+exit 1
+EOF
+chmod +x "$gb_tmp/codex" "$gb_tmp/gemini"
+gb_default="$(PATH="$gb_tmp:/usr/bin:/bin" "$sh_bin" "$root/scripts/detect_panel.sh" 2>/dev/null)"
+if echo "$gb_default" | grep -q '^PANEL_STATE=DEGRADED_OPUS_GPT5' && \
+   echo "$gb_default" | grep -q '^GEMINI_BACKEND=none'; then
+  ok "backend auto ignores legacy gemini unless explicitly enabled"
+else bad "backend auto should ignore legacy gemini by default"; fi
+gb_legacy="$(FUSION_ALLOW_LEGACY_GEMINI=1 PATH="$gb_tmp:/usr/bin:/bin" "$sh_bin" "$root/scripts/detect_panel.sh" 2>/dev/null)"
+if echo "$gb_legacy" | grep -q '^PANEL_STATE=PREMIUM' && \
+   echo "$gb_legacy" | grep -q '^GEMINI_BACKEND=legacy-gemini'; then
+  ok "backend auto can opt into legacy gemini"
+else bad "backend legacy opt-in should make Gemini panelist available"; fi
+cat > "$gb_tmp/agy" <<'EOF'
+#!/usr/bin/env bash
+if [ "${1:-}" = "--version" ]; then echo "agy fake"; exit 0; fi
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --print|-p|--prompt) shift; printf 'AGY:%s\n' "$1"; exit 0 ;;
+  esac
+  shift
+done
+exit 1
+EOF
+chmod +x "$gb_tmp/agy"
+gb_agy="$(PATH="$gb_tmp:/usr/bin:/bin" "$sh_bin" "$root/scripts/detect_panel.sh" 2>/dev/null)"
+if echo "$gb_agy" | grep -q '^PANEL_STATE=PREMIUM' && \
+   echo "$gb_agy" | grep -q '^GEMINI_BACKEND=antigravity'; then
+  ok "backend auto prefers Antigravity agy"
+else bad "backend auto should prefer agy"; fi
+gb_prompt="$(mktemp /tmp/pfo_agy_prompt.XXXXXX)"; gb_out="$(mktemp /tmp/pfo_agy_out.XXXXXX)"
+printf 'hello backend\n' > "$gb_prompt"; : > "$gb_out"
+if PATH="$gb_tmp:/usr/bin:/bin" "$sh_bin" "$root/scripts/run_gemini.sh" "$gb_prompt" "$gb_out" >/dev/null 2>&1 && \
+   grep -q '^AGY:hello backend' "$gb_out"; then
+  ok "run_gemini.sh delegates to agy backend"
+else bad "run_gemini.sh should delegate to agy backend"; fi
+rm -rf "$gb_tmp" "$gb_prompt" "$gb_out"
 
 echo "-- lint_contract behavior --"
 if python3 "$root/scripts/lint_contract.py" "$root/examples/workflow-contract.example.md" >/dev/null 2>&1; then
@@ -175,7 +225,9 @@ echo "-- run_triple_fusion stale-output guard --"
 # A prior run's leftovers in a reused out_dir must be cleared at start, so a mid-run read can't mistake
 # stale output for this run's result. Hide the panel CLIs via PATH so the run aborts at the assert gate
 # AFTER the stale-clear (never a paid call); skip if a CLI somehow resolves under /usr/bin:/bin.
-if PATH=/usr/bin:/bin command -v codex >/dev/null 2>&1 || PATH=/usr/bin:/bin command -v gemini >/dev/null 2>&1; then
+if PATH=/usr/bin:/bin command -v codex >/dev/null 2>&1 || \
+   PATH=/usr/bin:/bin command -v gemini >/dev/null 2>&1 || \
+   PATH=/usr/bin:/bin command -v agy >/dev/null 2>&1; then
   echo "  note  SKIP stale-clear check (a panel CLI resolves under /usr/bin:/bin; can't hide it safely)"
 else
   rtf_d="$(mktemp -d /tmp/pfo_rtf.XXXXXX)"; rtf_p="$(mktemp /tmp/pfo_rtf_p.XXXXXX)"; printf 'hi\n' > "$rtf_p"

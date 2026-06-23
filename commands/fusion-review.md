@@ -28,8 +28,8 @@ Same honest-degrade rule as `/fusion`: hard-fail unless PREMIUM or `FUSION_ALLOW
 
 ## Step 1 — Fan out, blind and in parallel
 
-**Build an explicit review packet first.** The codex/gemini panelists run sandboxed and cannot read your
-repo, so bundle the ACTUAL materials into the brief: the diff (`git diff <range>`) and/or the full
+**Build an explicit review packet first.** The codex/Gemini-backend panelists run sandboxed and cannot
+read your repo, so bundle the ACTUAL materials into the brief: the diff (`git diff <range>`) and/or the full
 contents of the target files (or a Context Pack from `/fusion-context`), with line numbers so panelists
 can cite `file:line`. Never pass bare paths — a panelist that can't see the code can't review it.
 

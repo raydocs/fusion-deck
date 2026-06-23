@@ -4,7 +4,8 @@ Short and load-bearing. Apply across every command and script.
 
 ## Secrets & private data
 - **Never hardcode** API keys, tokens, accounts, or private absolute paths in any file. Model selection is
-  via env override (`FUSION_CODEX_MODEL`, `FUSION_GEMINI_MODEL`); auth lives in the CLIs themselves.
+  via env override (`FUSION_CODEX_MODEL`, `FUSION_ANTIGRAVITY_MODEL`, `FUSION_GEMINI_MODEL` for legacy);
+  auth lives in the CLIs themselves.
 - **Never leak secrets into a Context Pack or Handoff Capsule.** Before emitting, scan and drop/redact.
   Deny-patterns to exclude: `.env*`, `*.pem`, `*.key`, `id_rsa*`, `credentials*`, `secrets*`,
   `*.p12`/`*.keystore`, and any line matching `(?i)(api[_-]?key|secret|token|password|bearer)\s*[:=]`.

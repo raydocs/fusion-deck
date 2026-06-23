@@ -15,11 +15,11 @@ Load `references/panel-prompt.md` and `references/judge-rubric.md` before judgin
 ## Step 0 — Pick & assert the panel
 
 ```bash
-bash <skill-root>/scripts/detect_panel.sh          # prints PANEL_STATE= and SLUG=
+bash <skill-root>/scripts/detect_panel.sh          # prints PANEL_STATE=, SLUG=, and GEMINI_BACKEND=
 bash <skill-root>/scripts/assert_triple_panel.sh   # hard-fails unless PREMIUM, unless FUSION_ALLOW_DEGRADED=1
 ```
 
-If `assert_triple_panel.sh` exits non-zero, STOP and tell the user which CLI is missing and how to enable
+If `assert_triple_panel.sh` exits non-zero, STOP and tell the user which CLI/backend is missing and how to enable
 it (or to re-run with `FUSION_ALLOW_DEGRADED=1` to *knowingly* use a smaller panel). Record the resulting
 `PANEL_STATE`; you will disclose it in the answer.
 

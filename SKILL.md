@@ -2,7 +2,8 @@
 name: fusion-deck
 description: >-
   Higher-confidence answers and careful execution for Claude Code. `/fusion` asks a panel of top models —
-  Opus 4.8 + GPT-5.5 (via the codex CLI) + Gemini 3.1 Pro (via the gemini CLI) — the same question in
+  Opus 4.8 + GPT-5.5 (via the codex CLI) + Gemini 3.1 Pro (via Antigravity CLI `agy`, with legacy
+  `gemini` as an explicit opt-in) — the same question in
   parallel, then Opus 4.8 judges all answers and writes one cross-checked answer; `/fusion-review` audits
   code or a plan the same way and returns one prioritized findings list. Companion commands: `/fusion-plan`
   turns a vague request into a verifiable plan, `/fusion-context` builds a token-budgeted context pack,
@@ -43,13 +44,13 @@ The PREMIUM panel is the full triple. Availability is reported by `scripts/detec
 
 | PANEL_STATE | Panel | Slug |
 | --- | --- | --- |
-| `PREMIUM` | Opus 4.8 + GPT-5.5 + Gemini 3.1 Pro | `opus4.8-gpt5.5-gemini3.1pro` |
+| `PREMIUM` | Opus 4.8 + GPT-5.5 + Gemini 3.1 Pro (`agy` by default) | `opus4.8-gpt5.5-gemini3.1pro` |
 | `DEGRADED_OPUS_GPT5` | Opus 4.8 + GPT-5.5 | `opus4.8-gpt5.5` |
 | `DEGRADED_OPUS_GEMINI` | Opus 4.8 + Gemini 3.1 Pro | `opus4.8-gemini3.1pro` |
 | `OPUS_ONLY` | two cold Opus 4.8 runs | `opus4.8-4.8` |
 
 **The cardinal rule: never silently fake the premium triple.** Premium commands call
-`scripts/assert_triple_panel.sh`, which hard-fails unless both external CLIs are present. An operator who
+`scripts/assert_triple_panel.sh`, which hard-fails unless `codex` and a Gemini backend are present. An operator who
 *knowingly* wants a smaller panel sets `FUSION_ALLOW_DEGRADED=1` — then the run proceeds but is loudly
 marked degraded. **Every panel answer must disclose the PANEL_STATE it actually ran.** See
 `references/degraded-mode.md`.

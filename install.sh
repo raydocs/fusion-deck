@@ -74,8 +74,8 @@ Input: \$ARGUMENTS
 EOF
   echo "  wrote /$cmd"
 }
-gen_wrapper fusion             "Fan a hard question to the premium model panel (Opus 4.8 + GPT-5.5 + Gemini 3.1 Pro), Opus judges and writes the answer." "<the hard question or task>"
-gen_wrapper fusion-review      "Audit code/a plan with the premium panel (Opus 4.8 + GPT-5.5 + Gemini 3.1 Pro), Opus-judged structured findings." "<diff, files, or design to review>"
+gen_wrapper fusion             "Fan a hard question to the premium model panel (Opus 4.8 + GPT-5.5 + Gemini 3.1 Pro via agy), Opus judges and writes the answer." "<the hard question or task>"
+gen_wrapper fusion-review      "Audit code/a plan with the premium panel (Opus 4.8 + GPT-5.5 + Gemini 3.1 Pro via agy), Opus-judged structured findings." "<diff, files, or design to review>"
 gen_wrapper fusion-investigate "Investigate a bug/'why is it like this' evidence-first; the panel adjudicates competing hypotheses; ends at a root-cause report." "<the bug or question> [--panel]"
 gen_wrapper fusion-plan        "Turn a vague request into a verifiable Claude Code Workflow Contract (not a Codex /goal)." "<the vague request> [--panel] [--deep]"
 gen_wrapper fusion-context     "Build a RepoPrompt-style Context Pack (fixed order, density tiers, token budget)." "<task the pack is for> [paste|handoff|agent]"
@@ -94,4 +94,4 @@ echo "      /fusion-review  /fusion-investigate  /fusion-plan  /fusion-context"
 echo "      /fusion-orchestrate  /fusion-optimize  /fusion-refactor  /fusion-handoff  /fusion-remind"
 echo "      Plain fusion: use the existing /fusion skill, or invoke /fusion-deck."
 echo "      Offline self-check anytime:  bash \"$src/scripts/smoke_test.sh\""
-echo "      For the PREMIUM triple panel, install the codex and gemini CLIs (see detect_panel output)."
+echo "      For the PREMIUM triple panel, install codex and Antigravity CLI (agy). Legacy gemini is opt-in."

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# run_gemini.sh — run one Gemini 3.1 Pro panelist (via the gemini CLI) on a prompt, with web + bash.
+# run_gemini.sh — run one Gemini 3.1 Pro panelist via the configured backend.
 #
 # Usage:
 #   run_gemini.sh <prompt_file> <output_file>
@@ -10,25 +10,39 @@
 #   to be sure. Override with FUSION_GEMINI_MODEL=<slug> when the preview slug rotates. The resolved
 #   model is always echoed (MODEL=...).
 #
-# Degrades gracefully: if `gemini` is missing it exits 127 with a clear message so the orchestrator
-# can drop Gemini and downgrade the panel (DEGRADED_OPUS_GPT5) rather than failing the whole run.
+# Backend selection:
+#   FUSION_GEMINI_BACKEND=auto (default) uses Antigravity CLI (`agy`) when available.
+#   Legacy `gemini` requires FUSION_GEMINI_BACKEND=gemini or FUSION_ALLOW_LEGACY_GEMINI=1.
+#
+# Degrades gracefully: if no Gemini backend is available it exits 127 with a clear message so the
+# orchestrator can drop Gemini and downgrade the panel (DEGRADED_OPUS_GPT5) rather than failing the
+# whole run.
 
 set -uo pipefail
+
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$here/gemini_backend.sh"
 
 prompt_file="${1:?usage: run_gemini.sh <prompt_file> <output_file>}"
 output_file="${2:?usage: run_gemini.sh <prompt_file> <output_file>}"
 
-if ! command -v gemini >/dev/null 2>&1; then
-  echo "[run_gemini.sh] gemini CLI not installed — skip this panelist (panel downgrades)." >&2
-  exit 127
-fi
 if [ ! -s "$prompt_file" ]; then
   echo "[run_gemini.sh] prompt file '$prompt_file' is missing or empty." >&2
   exit 2
 fi
 
+if ! fusion_detect_gemini_backend; then
+  echo "[run_gemini.sh] no Gemini backend available - skip this panelist (panel downgrades)." >&2
+  echo "[run_gemini.sh] $FUSION_GEMINI_BACKEND_REASON" >&2
+  exit 127
+fi
+
+if [ "$FUSION_GEMINI_BACKEND_RESOLVED" = "antigravity" ]; then
+  exec bash "$here/run_antigravity.sh" "$prompt_file" "$output_file"
+fi
+
 gemini_model="${FUSION_GEMINI_MODEL:-gemini-3.1-pro-preview}"
-echo "[run_gemini.sh] MODEL=$gemini_model" >&2
+echo "[run_gemini.sh] MODEL=$gemini_model BACKEND=legacy-gemini" >&2
 
 # Resolve prompt/output to ABSOLUTE paths, then run gemini inside a throwaway scratch dir. --yolo
 # auto-approves tool use, so isolating cwd keeps its file writes out of the caller's repo and blind to
@@ -49,4 +63,4 @@ if [ $status -ne 0 ] || [ ! -s "$output_file" ]; then
   echo "[run_gemini.sh] gemini exited $status or produced no output." >&2
   exit 1
 fi
-echo "[run_gemini.sh] ok -> $output_file (MODEL=$gemini_model)"
+echo "[run_gemini.sh] ok -> $output_file (MODEL=$gemini_model BACKEND=legacy-gemini)"
