@@ -18,6 +18,8 @@ to the one command that fits and why — one line, then stop.
 | The situation | Command | Panel? |
 | --- | --- | --- |
 | a hard call / trade-off to settle or cross-check | `/fusion` | yes |
+| "choose the right workflow for this" / cheap-unless-risky | `/fusion-auto` | router decides |
+| maximum quality / high-risk, hard-to-reverse call | `/fusion-ultra` | yes + probes |
 | review code, a diff, or a plan before it ships | `/fusion-review` | yes |
 | a bug, or "why is it built like this?" | `/fusion-investigate` | by exception |
 | a vague ask to turn into a checkable plan | `/fusion-plan` (`--deep` for a design doc) | no |

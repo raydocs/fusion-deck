@@ -41,8 +41,17 @@ if [ "$FUSION_GEMINI_BACKEND_RESOLVED" = "antigravity" ]; then
   exec bash "$here/run_antigravity.sh" "$prompt_file" "$output_file"
 fi
 
+# Prompt-size guard (same knob as run_codex.sh): oversized packets are curation bugs.
+max_prompt_bytes="${FUSION_MAX_PROMPT_BYTES:-400000}"
+prompt_bytes="$(wc -c < "$prompt_file" | tr -d ' ')"
+if [ "$max_prompt_bytes" -gt 0 ] 2>/dev/null && [ "$prompt_bytes" -gt "$max_prompt_bytes" ]; then
+  echo "[run_gemini.sh] prompt is ${prompt_bytes} bytes > FUSION_MAX_PROMPT_BYTES=${max_prompt_bytes}." >&2
+  exit 2
+fi
+
+timeout_secs="${FUSION_PANEL_TIMEOUT:-600}"
 gemini_model="${FUSION_GEMINI_MODEL:-gemini-3.1-pro-preview}"
-echo "[run_gemini.sh] MODEL=$gemini_model BACKEND=legacy-gemini" >&2
+echo "[run_gemini.sh] MODEL=$gemini_model BACKEND=legacy-gemini TIMEOUT=${timeout_secs}s" >&2
 
 # Resolve prompt/output to ABSOLUTE paths, then run gemini inside a throwaway scratch dir. --yolo
 # auto-approves tool use, so isolating cwd keeps its file writes out of the caller's repo and blind to
@@ -55,12 +64,25 @@ trap 'rm -rf "$scratch"' EXIT
 # Non-interactive (headless) run. --yolo auto-approves tool use; --skip-trust is REQUIRED because the
 # fresh scratch dir is untrusted. The prompt is fed on STDIN (not argv) so a large review packet can't hit
 # ARG_MAX and the prompt text isn't exposed in process args (gemini reads the prompt from stdin).
-( cd "$scratch" && gemini --model "$gemini_model" --yolo --skip-trust < "$prompt_abs" ) \
+# Mark the panelist process tree so the recursion guard refuses any nested fusion invocation.
+export FUSION_PANEL_CHILD=1
+( cd "$scratch" && fusion_run_with_timeout "$timeout_secs" gemini --model "$gemini_model" --yolo --skip-trust < "$prompt_abs" ) \
   > "$out_abs" 2> >(tail -20 >&2)
 status=$?
 
+if [ $status -eq 124 ] || [ $status -eq 143 ]; then
+  echo "[run_gemini.sh] gemini TIMED OUT after ${timeout_secs}s (FUSION_PANEL_TIMEOUT) — panelist is ABSENT." >&2
+  exit 1
+fi
 if [ $status -ne 0 ] || [ ! -s "$output_file" ]; then
   echo "[run_gemini.sh] gemini exited $status or produced no output." >&2
+  exit 1
+fi
+# Plausibility floor — a few-byte "answer" is an error banner, not a panel answer.
+min_out_bytes="${FUSION_MIN_OUTPUT_BYTES:-200}"
+out_bytes="$(wc -c < "$out_abs" | tr -d ' ')"
+if [ "$min_out_bytes" -gt 0 ] 2>/dev/null && [ "$out_bytes" -lt "$min_out_bytes" ]; then
+  echo "[run_gemini.sh] output is only ${out_bytes} bytes (< FUSION_MIN_OUTPUT_BYTES=${min_out_bytes}) — treating as failed." >&2
   exit 1
 fi
 echo "[run_gemini.sh] ok -> $output_file (MODEL=$gemini_model BACKEND=legacy-gemini)"

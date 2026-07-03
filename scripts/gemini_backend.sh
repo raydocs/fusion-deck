@@ -8,16 +8,25 @@
 
 set -uo pipefail
 
+# Run a command under a hard time limit (seconds). Portable: timeout/gtimeout when present, else a
+# bash watchdog. The watchdog TERMs first (KILL only after a grace period), and on the normal path we
+# kill the watchdog's own children too so no orphan `sleep` outlives the probe.
+fusion_run_with_timeout() {
+  _frt_secs="$1"; shift
+  if command -v timeout >/dev/null 2>&1; then timeout "$_frt_secs" "$@"; return $?; fi
+  if command -v gtimeout >/dev/null 2>&1; then gtimeout "$_frt_secs" "$@"; return $?; fi
+  "$@" & _frt_pid=$!
+  ( sleep "$_frt_secs"; kill "$_frt_pid" 2>/dev/null; sleep 5; kill -9 "$_frt_pid" 2>/dev/null ) & _frt_w=$!
+  wait "$_frt_pid" 2>/dev/null
+  _frt_rc=$?
+  pkill -P "$_frt_w" 2>/dev/null
+  kill "$_frt_w" 2>/dev/null
+  wait "$_frt_w" 2>/dev/null
+  return "$_frt_rc"
+}
+
 fusion_bounded() {
-  if command -v timeout >/dev/null 2>&1; then timeout 5 "$@"; return $?; fi
-  if command -v gtimeout >/dev/null 2>&1; then gtimeout 5 "$@"; return $?; fi
-  "$@" & _fbp=$!
-  ( sleep 5; kill -9 "$_fbp" 2>/dev/null ) & _fbw=$!
-  wait "$_fbp" 2>/dev/null
-  _fbrc=$?
-  kill "$_fbw" 2>/dev/null
-  wait "$_fbw" 2>/dev/null
-  return "$_fbrc"
+  fusion_run_with_timeout 5 "$@"
 }
 
 fusion_cli_available() {

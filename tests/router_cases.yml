@@ -1,0 +1,34 @@
+- id: review_staged_diff
+  task: "review my staged diff"
+  workflow: pair_review_then_verify
+- id: multicurrency_bug
+  task: "why is checkout total wrong in multi-currency?"
+  workflow: evidence_first_investigate
+- id: locking_tradeoff
+  task: "should we use optimistic or pessimistic locking?"
+  workflow: pair_blind_panel
+- id: auth_migration
+  task: "review this auth migration plan"
+  workflow: full_blind_panel
+- id: max_quality
+  task: "maximum quality review of this data migration"
+  quality: max
+  workflow: ultra_two_round_panel
+# Negative cases — must NOT escalate. 'auth' inside 'author', 'secret' inside 'secretary',
+# and 'api' inside 'rapid' are substring traps; word-boundary matching keeps these cheap.
+- id: author_not_auth
+  task: "review the author bio page markup"
+  workflow: pair_review_then_verify
+- id: secretary_not_secret
+  task: "add a secretary field to the contact form"
+  workflow: single_worker_verified
+- id: rapid_not_api
+  task: "make the dashboard rapid to load"
+  workflow: single_model
+# CJK triggers appear mid-sentence with no word boundaries — must still route to the full panel.
+- id: cjk_full_table
+  task: "帮我开全桌评审这个方案"
+  workflow: full_blind_panel
+- id: cjk_max_quality
+  task: "用最高质量帮我判断这个架构选型"
+  workflow: full_blind_panel

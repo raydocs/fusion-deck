@@ -43,13 +43,16 @@ flowchart LR
 > **The catch:** the full panel needs all three subscriptions/CLIs. Missing one? No drama — it runs with
 > whatever you've got and always tells you exactly which models answered.
 
-## The proof
+## The evidence (OpenRouter's measurement, not ours)
 
-OpenRouter's **DRACO** deep‑research benchmark — 100 tasks across 10 domains:
+OpenRouter measured this **model configuration** on their **DRACO** deep‑research benchmark — 100 tasks
+across 10 domains. To be precise about what's claimed: these numbers are OpenRouter's, for their Fusion
+pipeline over the same models — fusion-deck runs the same panel shape locally but has **not** been
+independently benchmarked (different judge scaffolding, CLI-subscription model variants):
 
 | Setup | DRACO | vs. best solo model |
 | --- | --- | --- |
-| 🃏 **fusion-deck's panel** — Opus 4.8 + GPT‑5.5 + Gemini 3.1 Pro, judged by Opus 4.8 | **68.3%** | **+3.0** 🟢 |
+| 🃏 **the same panel fusion-deck runs** — Opus 4.8 + GPT‑5.5 + Gemini 3.1 Pro, judged by Opus 4.8 | **68.3%** | **+3.0** 🟢 |
 | Opus 4.8 + GPT‑5.5, judged by Opus 4.8 | 67.6% | +2.3 |
 | 🌟 Claude Fable 5 — the lone star, solo | 65.3% | — _(baseline)_ |
 | GPT‑5.5, solo | 60.0% | −5.3 |
@@ -69,6 +72,11 @@ leaves for a third party.*
 `/fusion <question>` and `/fusion-review <code or diff>` fan your question (or your code) out to the panel,
 blind and in parallel, then Opus 4.8 judges it into **one cross‑checked answer** — or one prioritized
 findings list, must‑fix first. For the calls where being confidently wrong is expensive.
+
+**v2 adds a router.** `/fusion-auto <task>` picks the workflow first — single worker, verified worker,
+intentional pair, full panel, or ultra — and records a local run ledger under `.fusion/runs/`. `/fusion`
+still means "open the full panel"; `/fusion-auto` is the smarter default when you want quality without
+unnecessary calls.
 
 **② Work smart — run the workflow.** This is the part people sleep on:
 
@@ -108,7 +116,9 @@ directly; the panel is for the calls where being wrong is expensive.
 
 | When you're trying to… | Reach for | Panel? |
 | --- | --- | --- |
-| Settle a hard call or trade-off (*"optimistic or pessimistic locking?"*) | `/fusion` | yes |
+| Settle a hard call or trade-off (*"optimistic or pessimistic locking?"*) | `/fusion` · `--wide` adds a 2nd cold Opus (4 panelists) | yes |
+| Let the system choose the right workflow and escalate only when needed | `/fusion-auto` | router decides |
+| Maximize quality on a hard/high-risk task with targeted second-round probes | `/fusion-ultra` — round 1 is **wide** (Opus ×2 + GPT + Gemini) | yes |
 | Vet code, a diff, or a plan before it ships | `/fusion-review` | yes |
 | Find the root cause of a bug, or *"why is it built like this?"* | `/fusion-investigate` | by exception |
 | Turn a vague idea into a concrete, checkable plan | `/fusion-plan` · `--deep` for a design doc | no |
@@ -129,7 +139,8 @@ git clone https://github.com/raydocs/fusion-deck.git
 bash fusion-deck/install.sh
 ```
 
-Then run **`/reload-skills`** in Claude Code (or restart). Done — `/fusion`, `/fusion-plan`, … are ready.
+Then run **`/reload-skills`** in Claude Code (or restart). Done — `/fusion`, `/fusion-auto`,
+`/fusion-ultra`, `/fusion-plan`, … are ready.
 
 **For the full 3‑model panel**, install the two optional CLIs (and be logged into each):
 
@@ -149,6 +160,8 @@ bash ~/.claude/skills/fusion-deck/scripts/smoke_test.sh     # offline self-check
 
 ```text
 /fusion Should we use optimistic or pessimistic locking for the booking flow? Trade-offs at our scale.
+/fusion-auto review my staged diff
+/fusion-ultra review this auth migration plan
 /fusion-review git diff main...HEAD
 /fusion-investigate the cart total is wrong for multi-currency orders
 /fusion-plan add a /health endpoint with a test
@@ -164,11 +177,22 @@ bash ~/.claude/skills/fusion-deck/scripts/smoke_test.sh     # offline self-check
 - **Where the savings come from.** It reuses the subscriptions you're already logged into (Claude /
   `codex` / Antigravity `agy`) — no per‑token API bill the way OpenRouter's Fusion API charges. *You just
   need the three subscriptions.* The full panel costs more quota and runs as slow as its slowest model, so only
-  `/fusion` and `/fusion-review` open the whole table by default, `/fusion-investigate` and
-  `/fusion-optimize` call it only at their decision points, and the rest are fast single‑model commands.
+  `/fusion`, `/fusion-ultra`, and `/fusion-review` open the whole table by default. `/fusion-auto` starts
+  cheaper and escalates when risk, conflict, or verification says the extra calls are worth it.
 - **Nothing is faked.** Every panel answer states which models actually answered; a smaller panel is never
-  dressed up as the full one.
-- **No secrets in the repo.** Auth lives in the CLIs; nothing private is hardcoded.
+  dressed up as the full one. That holds at runtime too: a panelist that rate-limits, times out, or
+  returns a tiny error banner mid-run makes the runner exit **13** with an honest manifest — the run
+  stops and discloses instead of quietly shipping a smaller panel (unless you set
+  `FUSION_ALLOW_DEGRADED=1`).
+- **No secrets in the repo.** Auth lives in the CLIs; nothing private is hardcoded. The local run ledger
+  (`.fusion/runs/`) writes a self-ignoring `.gitignore` so panel prompts (which can embed a diff under
+  review) never end up in a commit.
+- **Env knobs.** `FUSION_PANEL_TIMEOUT` (s, default 600) hard-bounds each panelist; `FUSION_VERIFIER_TIMEOUT`
+  (s, default 900) bounds verifier commands; `FUSION_MAX_PROMPT_BYTES` (default 400000) refuses oversized
+  packets; `FUSION_MIN_OUTPUT_BYTES` (default 200) treats error-banner-sized outputs as failures;
+  `FUSION_NO_WEB=1` runs the codex panelist read-only with no web tool (the default posture for
+  `/fusion-review`, whose packet is untrusted content); `FUSION_ALLOW_DEGRADED=1` knowingly accepts a
+  smaller panel. Each accepts `0` to disable where applicable.
 
 ## License
 
@@ -205,13 +229,15 @@ flowchart LR
 
 > **小前提：** 想凑齐整桌，你得有这三家的订阅 / CLI。少一个也不耽误 —— 它会用现有的接着跑，而且每次都老老实实告诉你这回到底上了谁。
 
-### 实测
+### 佐证（OpenRouter 的实测，不是我们的）
 
-OpenRouter 的 **DRACO** 深度研究基准 —— 10 个领域、100 道题：
+OpenRouter 在他们的 **DRACO** 深度研究基准（10 个领域、100 道题）上实测了**这套模型阵容**。把话说准：
+下面的数字是 OpenRouter 对他们自家 Fusion 管线的测量；fusion-deck 在本地跑的是同样的阵容形状，但
+**没有**独立跑过基准（评审脚手架不同、CLI 订阅版模型也有差异）：
 
 | 配置 | DRACO | 比最强单模型 |
 | --- | --- | --- |
-| 🃏 **fusion-deck 的阵容** —— Opus 4.8 + GPT‑5.5 + Gemini 3.1 Pro，Opus 4.8 评审 | **68.3%** | **+3.0** 🟢 |
+| 🃏 **与 fusion-deck 相同的阵容** —— Opus 4.8 + GPT‑5.5 + Gemini 3.1 Pro，Opus 4.8 评审 | **68.3%** | **+3.0** 🟢 |
 | Opus 4.8 + GPT‑5.5，Opus 4.8 评审 | 67.6% | +2.3 |
 | 🌟 Claude Fable 5 —— 独苗状元，单飞 | 65.3% | —（基准） |
 | GPT‑5.5，单飞 | 60.0% | −5.3 |
@@ -225,6 +251,8 @@ OpenRouter 的 **DRACO** 深度研究基准 —— 10 个领域、100 道题：
 
 **① 想得狠 —— 开一桌。**
 `/fusion <问题>`、`/fusion-review <代码 / diff>`：把问题（或代码）甩给一桌模型，各自盲答、并行跑，再由 Opus 4.8 评审成**一个交叉核对过的答案** —— 或者一份排好优先级、必改的排最前的问题清单。专治"答错了很贵"的场合。
+
+**v2 加了路由器。** `/fusion-auto <任务>` 会先选 workflow：单模型、worker+verifier、双模型 pair、full panel 或 ultra；每次运行写入本地 `.fusion/runs/` ledger。`/fusion` 仍然表示显式开完整 panel，`/fusion-auto` 才是想省调用又保质量时的入口。
 
 **② 干得巧 —— 跑工作流。** 这部分最容易被低估：
 
@@ -252,7 +280,9 @@ OpenRouter 的 **DRACO** 深度研究基准 —— 10 个领域、100 道题：
 
 | 你想干的 | 用 | 开整桌？ |
 | --- | --- | --- |
-| 拍一个难决定 / 权衡（*"乐观锁还是悲观锁？"*） | `/fusion` | 是 |
+| 拍一个难决定 / 权衡（*"乐观锁还是悲观锁？"*） | `/fusion` · `--wide` 加一个冷跑 Opus（4 席） | 是 |
+| 让系统自动选工作流，必要时才升级 | `/fusion-auto` | 路由决定 |
+| 高风险/困难任务，追求最大质量和二轮 targeted probes | `/fusion-ultra` —— 第一轮是**宽面板**（Opus ×2 + GPT + Gemini）| 是 |
 | 上线前审一段代码 / diff / 方案 | `/fusion-review` | 是 |
 | 查一个 bug 的根因，或*"这玩意儿为啥长这样？"* | `/fusion-investigate` | 按需 |
 | 把一句模糊想法变成能落地、能验收的计划 | `/fusion-plan` · `--deep` 出设计文档 | 否 |
@@ -272,7 +302,7 @@ git clone https://github.com/raydocs/fusion-deck.git
 bash fusion-deck/install.sh
 ```
 
-然后在 Claude Code 里跑一下 **`/reload-skills`**（或者直接重启），就齐活了 —— `/fusion`、`/fusion-plan`…… 拿来就能用。
+然后在 Claude Code 里跑一下 **`/reload-skills`**（或者直接重启），就齐活了 —— `/fusion`、`/fusion-auto`、`/fusion-ultra`、`/fusion-plan`…… 拿来就能用。
 
 **想凑齐三个模型的完整阵容**，再装两个可选 CLI（并各自登录好）：
 
@@ -291,6 +321,8 @@ bash ~/.claude/skills/fusion-deck/scripts/smoke_test.sh     # 本地自检（不
 
 ```text
 /fusion 预订流程到底用乐观锁还是悲观锁？按我们这个量级帮我权衡下
+/fusion-auto review my staged diff
+/fusion-ultra review this auth migration plan
 /fusion-review git diff main...HEAD
 /fusion-investigate 多币种订单的购物车总价算错了
 /fusion-plan 加一个带测试的 /health 接口
@@ -303,9 +335,10 @@ bash ~/.claude/skills/fusion-deck/scripts/smoke_test.sh     # 本地自检（不
 
 ### 几点说明
 
-- **省钱省在哪。** 它复用你电脑里已经登录的订阅（Claude / `codex` / Antigravity `agy`），不像 OpenRouter Fusion 那样按 token 收 API 费 —— **前提是你有这三家的订阅。** 整桌一起上更费额度、也得等最慢的那个，所以默认只有 `/fusion` 和 `/fusion-review` 开整桌，`/fusion-investigate` 和 `/fusion-optimize` 只在关键决策点才开桌，其余命令走单模型，图个快。
-- **不糊弄。** 每个面板答案都会写明这回到底是哪几个模型回答的；小阵容绝不冒充满配。
-- **仓库里不放密钥。** 登录的事交给各家 CLI，绝不往代码里塞私密信息。
+- **省钱省在哪。** 它复用你电脑里已经登录的订阅（Claude / `codex` / Antigravity `agy`），不像 OpenRouter Fusion 那样按 token 收 API 费 —— **前提是你有这三家的订阅。** 整桌一起上更费额度、也得等最慢的那个，所以默认只有 `/fusion`、`/fusion-ultra` 和 `/fusion-review` 开整桌；`/fusion-auto` 会先走更便宜的路线，只有风险、冲突或验证失败时才升级。
+- **不糊弄。** 每个面板答案都会写明这回到底是哪几个模型回答的；小阵容绝不冒充满配。运行中也一样：某个模型半路被限流、超时、或只吐出一条报错横幅，脚本会以退出码 **13** 停下并写出如实的 manifest —— 宁可停下来说清楚，也不悄悄用小阵容交差（除非你显式设了 `FUSION_ALLOW_DEGRADED=1`）。
+- **仓库里不放密钥。** 登录的事交给各家 CLI，绝不往代码里塞私密信息。本地运行台账（`.fusion/runs/`）会自带一个自我忽略的 `.gitignore`，面板 prompt（可能内嵌待审代码）永远不会被误提交。
+- **环境变量。** `FUSION_PANEL_TIMEOUT`（秒，默认 600）给每个面板成员上硬时限；`FUSION_VERIFIER_TIMEOUT`（秒，默认 900）限制验证命令；`FUSION_MAX_PROMPT_BYTES`（默认 400000）拒绝超大 prompt 包；`FUSION_MIN_OUTPUT_BYTES`（默认 200）把报错横幅体积的输出按失败处理；`FUSION_NO_WEB=1` 让 codex 面板成员只读、无联网工具（`/fusion-review` 默认如此，因为待审内容不可信）；`FUSION_ALLOW_DEGRADED=1` 表示明知阵容不齐仍要继续。可为 0 的项设 0 即禁用。
 
 ### 许可证
 

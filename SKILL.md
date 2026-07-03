@@ -5,7 +5,8 @@ description: >-
   Opus 4.8 + GPT-5.5 (via the codex CLI) + Gemini 3.1 Pro (via Antigravity CLI `agy`, with legacy
   `gemini` as an explicit opt-in) — the same question in
   parallel, then Opus 4.8 judges all answers and writes one cross-checked answer; `/fusion-review` audits
-  code or a plan the same way and returns one prioritized findings list. Companion commands: `/fusion-plan`
+  code or a plan the same way and returns one prioritized findings list. v2 adds `/fusion-auto` for
+  explainable routing and `/fusion-ultra` for two-round maximum-quality synthesis. Companion commands: `/fusion-plan`
   turns a vague request into a verifiable plan, `/fusion-context` builds a token-budgeted context pack,
   `/fusion-orchestrate` decomposes a task into verified sub-agent steps, `/fusion-handoff` writes a clean
   handoff. The panel always discloses which models actually answered (it never fakes the full panel). Use
@@ -52,8 +53,10 @@ The PREMIUM panel is the full triple. Availability is reported by `scripts/detec
 **The cardinal rule: never silently fake the premium triple.** Premium commands call
 `scripts/assert_triple_panel.sh`, which hard-fails unless `codex` and a Gemini backend are present. An operator who
 *knowingly* wants a smaller panel sets `FUSION_ALLOW_DEGRADED=1` — then the run proceeds but is loudly
-marked degraded. **Every panel answer must disclose the PANEL_STATE it actually ran.** See
-`references/degraded-mode.md`.
+marked degraded. The rule holds at **runtime** too: if a panelist fails mid-run (rate limit, timeout of
+`FUSION_PANEL_TIMEOUT`, implausibly tiny output), the runner writes the honest manifest and exits **13**
+unless degrade was explicitly allowed — stop and disclose, never silently continue. **Every panel answer
+must disclose the PANEL_STATE it actually ran.** See `references/degraded-mode.md`.
 
 ## Commands — and where the panel is worth its cost
 
@@ -62,7 +65,9 @@ independent cross-checking changes the answer's risk profile**; everywhere else,
 
 | Command | What it does | Panel by default? |
 | --- | --- | --- |
-| `/fusion` | Fan a hard question to the panel; Opus judges and writes the answer. | **Yes** |
+| `/fusion` | Fan a hard question to the panel; Opus judges and writes the answer. `--wide` adds a second cold Opus (4 panelists). | **Yes** |
+| `/fusion-auto` | Route a task through v2: pick workflow, verify, and escalate only when needed. | Router decides |
+| `/fusion-ultra` | Max-quality two-round workflow: **wide** blind panel (Opus ×2 + GPT + Gemini) → contradiction matrix → targeted probes → verifier. | **Yes + targeted probes** |
 | `/fusion-review` | Audit code/a plan via the panel; structured, cross-checked findings. | **Yes** |
 | `/fusion-investigate` | Evidence-first root-cause investigation; panel adjudicates competing hypotheses. | By exception — only when ≥2 hypotheses survive the evidence; `--panel` forces it |
 | `/fusion-plan` | Turn a vague request into a Claude Code Workflow Contract; `--deep` adds involvement + a critique pass. | No — single model; `--panel` to escalate a genuinely ambiguous, high-stakes planning question |
@@ -73,7 +78,7 @@ independent cross-checking changes the answer's risk profile**; everywhere else,
 | `/fusion-handoff` | Emit a Handoff Capsule. | No — summarization |
 | `/fusion-remind` | Re-anchor a drifting session: cheat-sheet of situation→command + the invariants. | No — pure recall |
 
-All ten install as `~/.claude/commands/<name>.md` wrappers (see README → Install); the whole skill is also
+All twelve install as `~/.claude/commands/<name>.md` wrappers (see README → Install); the whole skill is also
 invocable as `/fusion-deck`. (If a separate skill named `fusion` is also installed, that
 skill takes precedence for `/fusion` — this skill does not assume one is present.)
 
@@ -89,6 +94,8 @@ factual question, just answer directly — don't route a trivial ask into a pane
 | The user is… | Offer |
 | --- | --- |
 | stuck on a hard call / trade-off, or wants one cross-checked | `/fusion` |
+| asking "choose the right fusion workflow for this" or wanting cheaper/faster unless risk says otherwise | `/fusion-auto` |
+| asking for maximum quality / strongest possible answer / hard high-risk decision | `/fusion-ultra` |
 | asking you to review code, a diff, or a plan before it ships | `/fusion-review` |
 | reporting a bug, or asking "why is it built like this / where does this come from" | `/fusion-investigate` |
 | handing you a vague, underspecified ask to build | `/fusion-plan` (`--deep` for a full design doc) |
@@ -113,13 +120,18 @@ the cheaper/narrower one and say what the other would add.
    subagents**. One level of fan-out. (`orchestration-rubric.md`)
 4. **Verify, then dispatch fresh.** Check each item against its Done-when with a concrete probe (grep /
    read / test — not a skim) before moving on. **Never proceed with unresolved gaps.**
-5. **Contract, not `/goal`.** `/fusion-plan` emits a Workflow Contract; `scripts/lint_contract.py` rejects
+5. **v2 routes, it does not guess.** `/fusion-auto` chooses a workflow only, writes a ledger entry, verifies
+   when possible, and escalates by explicit policy. It does not replace `/fusion`'s full-panel meaning.
+6. **Contract, not `/goal`.** `/fusion-plan` emits a Workflow Contract; `scripts/lint_contract.py` rejects
    any `/goal` reference. (`workflow-contract.md`, `contract-lint-rules.md`)
-6. **Honesty path.** Use the status states `[todo]/[doing]/[done]/[blocked]/[incomplete]/[abandoned]`;
+7. **Honesty path.** Use the status states `[todo]/[doing]/[done]/[blocked]/[incomplete]/[abandoned]`;
    `[incomplete]` carries reason / proof / attempted / impact / next-decision. Report failures plainly.
-7. **Safety.** Never hardcode keys, accounts, or private paths; never leak secrets into a Context Pack;
-   the smoke test never calls paid models unless `FUSION_LIVE=1`. (`references/safety.md`)
-8. **Honest-degrade beyond the panel.** The new helpers obey the same rule: `codemap.sh` discloses
+8. **Safety.** Never hardcode keys, accounts, or private paths; never leak secrets into a Context Pack;
+   the smoke test never calls paid models (even under `FUSION_LIVE=1` — that flag only marks the mode
+   for the commands). Panel prompts embedding **untrusted content** (a diff under review) run with
+   `FUSION_NO_WEB=1` so injected instructions have no exfiltration path. (`references/safety.md`,
+   `references/panel-prompt.md`)
+9. **Honest-degrade beyond the panel.** The new helpers obey the same rule: `codemap.sh` discloses
    `CODEMAP_STATE` and falls back tree-sitter→ctags→grep; `selection_lint.py` gates discovered context on
    evidence (S007); `--deep`/`--discover`/`--worktrees` are opt-in. Use the best available, disclose what
    ran, fall back loudly. (`references/codemap.md`, `references/context-discovery.md`, `references/worktrees.md`)

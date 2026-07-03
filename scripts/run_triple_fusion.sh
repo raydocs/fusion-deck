@@ -17,6 +17,12 @@
 
 set -uo pipefail
 
+# Recursion guard — refuse BEFORE any side effect (the stale-clear below must never run for a child).
+if [ "${FUSION_PANEL_CHILD:-0}" = "1" ]; then
+  echo "[run_triple_fusion] recursive fusion invocation blocked: this process is already a panelist (FUSION_PANEL_CHILD=1)." >&2
+  exit 14
+fi
+
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$here/gemini_backend.sh"
 prompt_file="${1:?usage: run_triple_fusion.sh <prompt_file> <out_dir> [reasoning_effort]}"
@@ -30,8 +36,9 @@ mkdir -p "$out_dir"
 # output from an earlier run can be read mid-flight and mistaken for THIS run's result — a stale read looks
 # exactly like a degraded panel when it isn't. We remove only the files this script writes (never the whole
 # dir), which makes the manifest a reliable completion sentinel: manifest.txt present <=> this run finished.
-rm -f "$out_dir/manifest.txt" "$out_dir/codex_out.md" "$out_dir/gemini_out.md" \
-      "$out_dir/codex.log" "$out_dir/gemini.log"
+rm -f "$out_dir/manifest.txt" "$out_dir/manifest.txt.tmp" "$out_dir/codex_out.md" "$out_dir/gemini_out.md" \
+      "$out_dir/codex.log" "$out_dir/gemini.log" "$out_dir/ledger.env" \
+      "$out_dir/.codex_end" "$out_dir/.gemini_end"
 
 # Gate: confirm the panel (honors FUSION_ALLOW_DEGRADED). Capture PANEL_STATE without aborting so we
 # can record it in the manifest; if assert fails hard (no override), propagate its exit code.
@@ -48,22 +55,33 @@ codex_out="$out_dir/codex_out.md"
 gemini_out="$out_dir/gemini_out.md"
 codex_pid=""; gemini_pid=""
 
-# Same bounded availability check as the gate (assert_triple_panel.sh), so launch decisions agree with it
-# and a hung CLI can't wedge this script either. Portable timeout (timeout/gtimeout, else bash watchdog).
+# Same bounded availability check as the gate (assert_triple_panel.sh), so launch decisions agree with
+# it. The model runs themselves are bounded too: each runner enforces FUSION_PANEL_TIMEOUT (default
+# 600s), so a hung CLI is killed and recorded ABSENT instead of wedging this script.
 have() { fusion_cli_available "$1"; }
+panel_start="$(date +%s)"
 
+# Each panelist subshell stamps its own end time, so per-panelist wall-clock is accurate even though
+# both run in parallel and we `wait` for them in a fixed order.
 if have codex; then
-  ( bash "$here/run_codex.sh" "$prompt_file" "$codex_out" "$effort" ) > "$out_dir/codex.log" 2>&1 &
+  ( bash "$here/run_codex.sh" "$prompt_file" "$codex_out" "$effort"; s=$?; date +%s > "$out_dir/.codex_end"; exit $s ) > "$out_dir/codex.log" 2>&1 &
   codex_pid=$!
 fi
 if fusion_detect_gemini_backend; then
-  ( bash "$here/run_gemini.sh" "$prompt_file" "$gemini_out" ) > "$out_dir/gemini.log" 2>&1 &
+  ( bash "$here/run_gemini.sh" "$prompt_file" "$gemini_out"; s=$?; date +%s > "$out_dir/.gemini_end"; exit $s ) > "$out_dir/gemini.log" 2>&1 &
   gemini_pid=$!
 fi
 
 codex_rc="skipped"; gemini_rc="skipped"
 [ -n "$codex_pid" ]  && { wait "$codex_pid";  codex_rc=$?; }
 [ -n "$gemini_pid" ] && { wait "$gemini_pid"; gemini_rc=$?; }
+
+codex_secs="-"; gemini_secs="-"
+[ -s "$out_dir/.codex_end" ] && codex_secs=$(( $(cat "$out_dir/.codex_end") - panel_start ))
+[ -s "$out_dir/.gemini_end" ] && gemini_secs=$(( $(cat "$out_dir/.gemini_end") - panel_start ))
+prompt_bytes="$(wc -c < "$prompt_file" | tr -d ' ')"
+codex_bytes=0;  [ -f "$codex_out" ]  && codex_bytes="$(wc -c < "$codex_out" | tr -d ' ')"
+gemini_bytes=0; [ -f "$gemini_out" ] && gemini_bytes="$(wc -c < "$gemini_out" | tr -d ' ')"
 
 # REALIZED accounting: who ACTUALLY produced output. A CLI panelist that errored or was skipped is
 # ABSENT to the judge (never silent agreement). Opus 4.8 is always added later by the orchestrator.
@@ -78,7 +96,10 @@ else                                 realized="OPUS_ONLY"; fi
 cli_participants=""; $codex_ok2 && cli_participants="gpt5.5"; $gemini_ok2 && cli_participants="${cli_participants:+$cli_participants+}gemini3.1pro"
 absent=""; $codex_ok2 || absent="$absent gpt5.5(rc=$codex_rc)"; $gemini_ok2 || absent="$absent gemini3.1pro(rc=$gemini_rc)"
 
+# Write the manifest to a temp file and rename it into place ONLY when complete (ledger lines
+# included), so "manifest.txt exists" really is an atomic completion sentinel for readers.
 manifest="$out_dir/manifest.txt"
+manifest_tmp="$manifest.tmp"
 {
   echo "INTENDED_PANEL_STATE=$panel_state"
   echo "REALIZED_PANEL_STATE=$realized"
@@ -87,6 +108,8 @@ manifest="$out_dir/manifest.txt"
   echo "ABSENT=${absent:-none}"
   echo "TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   echo "PROMPT_FILE=$prompt_file"
+  echo "PROMPT_BYTES=$prompt_bytes"
+  echo "PANEL_TIMEOUT_SECONDS=${FUSION_PANEL_TIMEOUT:-600}"
   echo "CODEX_MODEL=${FUSION_CODEX_MODEL:-codex-default}"
   echo "GEMINI_BACKEND=${FUSION_GEMINI_BACKEND_RESOLVED:-none}"
   if [ "${FUSION_GEMINI_BACKEND_RESOLVED:-}" = "antigravity" ]; then
@@ -96,8 +119,20 @@ manifest="$out_dir/manifest.txt"
   fi
   echo "CODEX_OUT=$codex_out CODEX_RC=$codex_rc"
   echo "GEMINI_OUT=$gemini_out GEMINI_RC=$gemini_rc"
+  echo "CODEX_SECONDS=$codex_secs CODEX_OUT_BYTES=$codex_bytes"
+  echo "GEMINI_SECONDS=$gemini_secs GEMINI_OUT_BYTES=$gemini_bytes"
   echo "# NOTE: Opus 4.8 panelist + judge are added by the orchestrator, not this script."
-} > "$manifest"
+} > "$manifest_tmp"
+
+task_summary="$(tr '\n' ' ' < "$prompt_file" | cut -c1-180)"
+if ledger_env="$(python3 "$here/fusion_ledger.py" new --command run_triple_fusion --workflow premium_triple \
+    --task "$task_summary" --task-type panel --risk unknown --verifiability unknown \
+    --manifest "$manifest_tmp" --prompt "$prompt_file" 2>/dev/null)"; then
+  printf '%s\n' "$ledger_env" > "$out_dir/ledger.env"
+  printf '%s\n' "$ledger_env" >> "$manifest_tmp"
+fi
+mv "$manifest_tmp" "$manifest"
+rm -f "$out_dir/.codex_end" "$out_dir/.gemini_end"
 
 echo "[run_triple_fusion] INTENDED=$panel_state REALIZED=$realized  codex_rc=$codex_rc gemini_rc=$gemini_rc"
 echo "[run_triple_fusion] CLI participants: ${cli_participants:-none}${absent:+ ; absent:$absent} (Opus added by orchestrator)"
@@ -106,11 +141,22 @@ echo "[run_triple_fusion] NEXT (orchestrator): spawn an Opus 4.8 panelist with t
 echo "                    all returned answers per <skill-root>/references/judge-rubric.md. Disclose the"
 echo "                    REALIZED panel ($realized) — a failed/absent CLI panelist is NOT silent agreement."
 
-# A panelist that errored is treated as ABSENT by the judge, never as silent agreement. We only fail
-# hard if BOTH external panelists were attempted and both failed (no external panel signal at all).
+# A panelist that errored is treated as ABSENT by the judge, never as silent agreement. Fail hard if
+# BOTH external panelists were attempted and both failed (no external panel signal at all).
 if [ "$codex_rc" != "skipped" ] && [ "$codex_rc" != 0 ] && \
    [ "$gemini_rc" != "skipped" ] && [ "$gemini_rc" != 0 ]; then
   echo "[run_triple_fusion] both external panelists failed — only the Opus panelist will be available." >&2
   exit 1
+fi
+
+# Runtime honest-degrade gate: the assert gate above only proves the CLIs EXISTED at launch. A panelist
+# that fails DURING the run (rate limit, auth error, timeout, garbage output) still degrades the panel,
+# and proceeding silently would fake premium. Without an explicit FUSION_ALLOW_DEGRADED=1, stop here
+# (exit 13) so the orchestrator surfaces the realized state instead of quietly shipping less.
+if [ "$realized" != "PREMIUM" ] && [ "${FUSION_ALLOW_DEGRADED:-0}" != "1" ]; then
+  echo "[run_triple_fusion] a panelist FAILED at runtime (realized: $realized)." >&2
+  echo "[run_triple_fusion] not proceeding silently — set FUSION_ALLOW_DEGRADED=1 to accept the realized" >&2
+  echo "[run_triple_fusion] panel, or retry once the failed CLI is healthy. Manifest was written." >&2
+  exit 13
 fi
 exit 0

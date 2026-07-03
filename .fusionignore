@@ -1,0 +1,11 @@
+# Local fusion artifacts and secrets should not enter context packs.
+.fusion/
+.fusion-worktrees/
+.env*
+*.pem
+*.key
+id_rsa*
+credentials*
+secrets*
+*.p12
+*.keystore

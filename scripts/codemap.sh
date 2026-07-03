@@ -38,8 +38,10 @@ fi
 _bounded() {
   if command -v timeout  >/dev/null 2>&1; then timeout  5 "$@"; return $?; fi
   if command -v gtimeout >/dev/null 2>&1; then gtimeout 5 "$@"; return $?; fi
-  "$@" & _bp=$!; ( sleep 5; kill -9 "$_bp" 2>/dev/null ) & _bw=$!
-  wait "$_bp" 2>/dev/null; _brc=$?; kill "$_bw" 2>/dev/null; wait "$_bw" 2>/dev/null; return "$_brc"
+  # TERM first (KILL only as a follow-up), and reap the watchdog's own sleep so no orphan outlives us.
+  "$@" & _bp=$!; ( sleep 5; kill "$_bp" 2>/dev/null; sleep 5; kill -9 "$_bp" 2>/dev/null ) & _bw=$!
+  wait "$_bp" 2>/dev/null; _brc=$?
+  pkill -P "$_bw" 2>/dev/null; kill "$_bw" 2>/dev/null; wait "$_bw" 2>/dev/null; return "$_brc"
 }
 
 # A tool counts as available only if it's on PATH AND actually runs — presence != working.

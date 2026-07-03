@@ -22,6 +22,13 @@
 
 set -uo pipefail
 
+# Recursion guard: a panelist process must never convene its own panel (blindness invariant + loop risk).
+if [ "${FUSION_PANEL_CHILD:-0}" = "1" ]; then
+  echo "[assert_triple_panel] recursive fusion invocation blocked: this process is already a panelist (FUSION_PANEL_CHILD=1)." >&2
+  echo "[assert_triple_panel] panelists answer directly; only the outer orchestrator convenes panels." >&2
+  exit 14
+fi
+
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$here/gemini_backend.sh"
 

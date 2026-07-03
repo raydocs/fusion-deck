@@ -7,8 +7,8 @@
 # paid APIs (live panel runs are driven by the commands, not by the smoke test).
 #
 # It validates: shell syntax (bash -n), python compile, required-file presence, SKILL.md frontmatter
-# (name == directory), command frontmatter, detect_panel output, the assert gate's hard-fail and
-# explicit-degrade behavior, and that lint_contract.py passes a good contract and rejects a bad one.
+# (name == directory), command frontmatter, panel gates, v2 router/ledger/verifier helpers, and core
+# linters.
 #
 # Exit 0 = all checks pass; 1 = at least one failure.
 
@@ -32,16 +32,19 @@ echo "root: $root"
 echo "mode: $mode"
 echo
 
+err_tmp="$(mktemp "${TMPDIR:-/tmp}/pfo_smoke_err.XXXXXX")"
+trap 'rm -f "$err_tmp"' EXIT
+
 echo "-- shell syntax (bash -n) --"
 for s in "$root"/scripts/*.sh; do
-  if bash -n "$s" 2>/tmp/pfo_bashn.err; then ok "bash -n $(basename "$s")"
-  else bad "bash -n $(basename "$s"): $(cat /tmp/pfo_bashn.err)"; fi
+  if bash -n "$s" 2>"$err_tmp"; then ok "bash -n $(basename "$s")"
+  else bad "bash -n $(basename "$s"): $(cat "$err_tmp")"; fi
 done
 
 echo "-- python compile --"
 for p in "$root"/scripts/*.py; do
-  if python3 -m py_compile "$p" 2>/tmp/pfo_py.err; then ok "py_compile $(basename "$p")"
-  else bad "py_compile $(basename "$p"): $(cat /tmp/pfo_py.err)"; fi
+  if python3 -m py_compile "$p" 2>"$err_tmp"; then ok "py_compile $(basename "$p")"
+  else bad "py_compile $(basename "$p"): $(cat "$err_tmp")"; fi
 done
 if python3 "$root/scripts/lint_contract.py" --list-rules >/dev/null 2>&1; then ok "lint_contract.py --list-rules"
 else bad "lint_contract.py --list-rules"; fi
@@ -50,15 +53,16 @@ else bad "selection_lint.py --list-rules"; fi
 
 echo "-- required files --"
 required=(
-  README.md LICENSE install.sh SKILL.md
+  README.md LICENSE install.sh SKILL.md .fusionignore
   commands/fusion.md commands/fusion-review.md commands/fusion-plan.md
   commands/fusion-context.md commands/fusion-orchestrate.md commands/fusion-handoff.md
   commands/fusion-investigate.md commands/fusion-optimize.md commands/fusion-refactor.md
-  commands/fusion-remind.md
+  commands/fusion-remind.md commands/fusion-auto.md commands/fusion-ultra.md
   scripts/assert_triple_panel.sh scripts/detect_panel.sh scripts/gemini_backend.sh
   scripts/run_codex.sh scripts/run_gemini.sh scripts/run_antigravity.sh
-  scripts/run_triple_fusion.sh scripts/smoke_test.sh scripts/lint_contract.py
-  scripts/codemap.sh scripts/selection_lint.py scripts/fusion_worktree.sh
+  scripts/run_triple_fusion.sh scripts/smoke_test.sh scripts/lint_contract.py scripts/fusion_ledger.py
+  scripts/route_task.py scripts/assert_panel.sh scripts/run_panel.sh scripts/detect_verifiers.sh
+  scripts/run_verifier.sh scripts/codemap.sh scripts/selection_lint.py scripts/fusion_worktree.sh
   references/panel-prompt.md references/judge-rubric.md references/workflow-contract.md
   references/context-pack-format.md references/orchestration-rubric.md
   references/subagent-prompt-template.md references/verifier-prompt-template.md
@@ -66,7 +70,10 @@ required=(
   references/safety.md
   references/investigation-rubric.md references/optimize-scoreboard.md references/codemap.md
   references/context-discovery.md references/refactor-recipe.md references/worktrees.md
-  references/reminder.md references/probe-quality.md references/export.md
+  references/reminder.md references/probe-quality.md references/export.md references/router-policy.md
+  references/panel-modes.md references/run-ledger.md references/privacy-ledger.md
+  references/verifier-contract.md references/verifier-recipes.md references/contradiction-matrix.md
+  references/ultra-two-round.md docs/roadmap/v2-router.md tests/router_cases.yml
   scripts/preflight.sh scripts/fusion_export.sh
   examples/workflow-contract.example.md examples/context-pack.example.md
   examples/fusion-review.example.md examples/subagent-task.example.md examples/handoff.example.md
@@ -152,11 +159,69 @@ if echo "$gb_agy" | grep -q '^PANEL_STATE=PREMIUM' && \
 else bad "backend auto should prefer agy"; fi
 gb_prompt="$(mktemp /tmp/pfo_agy_prompt.XXXXXX)"; gb_out="$(mktemp /tmp/pfo_agy_out.XXXXXX)"
 printf 'hello backend\n' > "$gb_prompt"; : > "$gb_out"
-if PATH="$gb_tmp:/usr/bin:/bin" "$sh_bin" "$root/scripts/run_gemini.sh" "$gb_prompt" "$gb_out" >/dev/null 2>&1 && \
+# FUSION_MIN_OUTPUT_BYTES=0: the fake agy's answer is a few bytes, which the plausibility floor would
+# (correctly) reject in a real run — this check only exercises backend delegation.
+if FUSION_MIN_OUTPUT_BYTES=0 PATH="$gb_tmp:/usr/bin:/bin" "$sh_bin" "$root/scripts/run_gemini.sh" "$gb_prompt" "$gb_out" >/dev/null 2>&1 && \
    grep -q '^AGY:hello backend' "$gb_out"; then
   ok "run_gemini.sh delegates to agy backend"
 else bad "run_gemini.sh should delegate to agy backend"; fi
 rm -rf "$gb_tmp" "$gb_prompt" "$gb_out"
+
+echo "-- v2 router / panel / ledger / verifier helpers --"
+if python3 "$root/scripts/route_task.py" --check "$root/tests/router_cases.yml" >/dev/null 2>&1; then
+  ok "route_task.py passes router_cases.yml"
+else bad "route_task.py should pass tests/router_cases.yml"; fi
+rt="$(python3 "$root/scripts/route_task.py" --task "review my staged diff" 2>/dev/null)"
+echo "$rt" | grep -q '"recommended_workflow": "pair_review_then_verify"' && ok "route_task.py routes review -> pair_review_then_verify" || bad "route_task.py review route mismatch"
+if PATH=/nonexistent "$sh_bin" "$root/scripts/assert_panel.sh" --mode single_opus >/dev/null 2>&1; then
+  ok "assert_panel.sh allows single_opus with no external CLIs"
+else bad "assert_panel.sh single_opus should not need external CLIs"; fi
+# Recursion guard: a panelist process (FUSION_PANEL_CHILD=1) must be refused with exit 14 everywhere.
+FUSION_PANEL_CHILD=1 "$sh_bin" "$root/scripts/assert_panel.sh" --mode single_opus >/dev/null 2>&1
+[ $? -eq 14 ] && ok "assert_panel.sh blocks recursive invocation (exit 14)" || bad "assert_panel.sh should exit 14 under FUSION_PANEL_CHILD=1"
+FUSION_PANEL_CHILD=1 "$sh_bin" "$root/scripts/assert_triple_panel.sh" >/dev/null 2>&1
+[ $? -eq 14 ] && ok "assert_triple_panel.sh blocks recursive invocation (exit 14)" || bad "assert_triple_panel.sh should exit 14 under FUSION_PANEL_CHILD=1"
+rec_d="$(mktemp -d /tmp/pfo_rec.XXXXXX)"; printf 'x\n' > "$rec_d/p.md"; printf 'keep\n' > "$rec_d/manifest.txt"
+FUSION_PANEL_CHILD=1 "$sh_bin" "$root/scripts/run_panel.sh" --mode single_opus "$rec_d/p.md" "$rec_d" >/dev/null 2>&1
+rec_rc=$?
+if [ "$rec_rc" -eq 14 ] && [ -s "$rec_d/manifest.txt" ]; then
+  ok "run_panel.sh blocks recursion BEFORE the stale-clear (exit 14, out_dir untouched)"
+else bad "run_panel.sh recursion guard broken (rc=$rec_rc, manifest kept: $([ -s "$rec_d/manifest.txt" ] && echo yes || echo no))"; fi
+rm -rf "$rec_d"
+if PATH=/nonexistent "$sh_bin" "$root/scripts/assert_panel.sh" --mode opus_gpt_pair >/dev/null 2>&1; then
+  bad "assert_panel.sh opus_gpt_pair should fail without codex"
+else ok "assert_panel.sh fails missing intentional pair dependency"; fi
+ap_tmp="$(mktemp -d /tmp/pfo_ap.XXXXXX)"
+cat > "$ap_tmp/codex" <<'EOF'
+#!/usr/bin/env bash
+if [ "${1:-}" = "--version" ]; then echo "codex fake"; exit 0; fi
+exit 1
+EOF
+cat > "$ap_tmp/agy" <<'EOF'
+#!/usr/bin/env bash
+if [ "${1:-}" = "--version" ]; then echo "agy fake"; exit 0; fi
+exit 1
+EOF
+chmod +x "$ap_tmp/codex" "$ap_tmp/agy"
+if PATH="$ap_tmp:/usr/bin:/bin" "$sh_bin" "$root/scripts/assert_panel.sh" --mode premium_triple >/dev/null 2>&1; then
+  ok "assert_panel.sh accepts premium_triple with fake codex+agy"
+else bad "assert_panel.sh should accept premium_triple with fake codex+agy"; fi
+rm -rf "$ap_tmp"
+ledger_tmp="$(mktemp -d /tmp/pfo_ledger.XXXXXX)"
+if python3 "$root/scripts/fusion_ledger.py" --out-root "$ledger_tmp" new --command smoke --workflow single_model --task "hello" >/dev/null 2>&1 && \
+   python3 "$root/scripts/fusion_ledger.py" --out-root "$ledger_tmp" show latest >/dev/null 2>&1 && \
+   python3 "$root/scripts/fusion_ledger.py" --out-root "$ledger_tmp" summarize --last 1 | grep -q '^RUNS=1'; then
+  ok "fusion_ledger.py creates/shows/summarizes runs"
+else bad "fusion_ledger.py basic lifecycle failed"; fi
+rm -rf "$ledger_tmp"
+vf_tmp="$(mktemp -d /tmp/pfo_vf.XXXXXX)"
+printf 'test:\n\t@echo ok\n' > "$vf_tmp/Makefile"
+vf_detect="$(cd "$vf_tmp" && "$sh_bin" "$root/scripts/detect_verifiers.sh" 2>/dev/null)"
+echo "$vf_detect" | grep -q '^VERIFIER_STATE=FOUND' && ok "detect_verifiers.sh finds Makefile test" || bad "detect_verifiers.sh should find Makefile test"
+if ( cd "$vf_tmp" && "$sh_bin" "$root/scripts/run_verifier.sh" --command "make test" --out-dir "$vf_tmp/out" >/dev/null 2>&1 ); then
+  ok "run_verifier.sh runs explicit command"
+else bad "run_verifier.sh should run explicit command"; fi
+rm -rf "$vf_tmp"
 
 echo "-- lint_contract behavior --"
 if python3 "$root/scripts/lint_contract.py" "$root/examples/workflow-contract.example.md" >/dev/null 2>&1; then
@@ -236,6 +301,89 @@ else
   if [ ! -e "$rtf_d/manifest.txt" ] && [ ! -e "$rtf_d/gemini_out.md" ]; then ok "run_triple_fusion clears stale outputs before running"
   else bad "run_triple_fusion left stale artifacts ($(ls "$rtf_d" 2>/dev/null | tr '\n' ' '))"; fi
   rm -rf "$rtf_d" "$rtf_p"
+fi
+
+echo "-- run_panel.sh end-to-end (fake CLIs, no paid calls) --"
+# Same PATH-hiding guard as the stale-clear check: only run when no real panel CLI resolves under
+# /usr/bin:/bin, so the fakes fully shadow and nothing paid can be invoked.
+if PATH=/usr/bin:/bin command -v codex >/dev/null 2>&1 || \
+   PATH=/usr/bin:/bin command -v gemini >/dev/null 2>&1 || \
+   PATH=/usr/bin:/bin command -v agy >/dev/null 2>&1; then
+  echo "  note  SKIP run_panel end-to-end (a panel CLI resolves under /usr/bin:/bin; can't hide it safely)"
+else
+  rp_tmp="$(mktemp -d /tmp/pfo_rp.XXXXXX)"
+  # Healthy fake codex: honors --version, finds -o <file>, writes a plausible-size answer.
+  cat > "$rp_tmp/codex" <<'EOF'
+#!/usr/bin/env bash
+if [ "${1:-}" = "--version" ]; then echo "codex fake"; exit 0; fi
+out=""; prev=""
+for a in "$@"; do [ "$prev" = "-o" ] && out="$a"; prev="$a"; done
+cat >/dev/null
+[ -z "$out" ] && exit 1
+{ printf 'CODEX-ANSWER '; head -c 300 /dev/zero | tr '\0' 'x'; echo; } > "$out"
+exit 0
+EOF
+  # Healthy fake agy: answers --print on stdout with a plausible-size answer.
+  cat > "$rp_tmp/agy" <<'EOF'
+#!/usr/bin/env bash
+if [ "${1:-}" = "--version" ]; then echo "agy fake"; exit 0; fi
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --print) printf 'AGY-ANSWER '; head -c 300 /dev/zero | tr '\0' 'y'; echo; exit 0 ;;
+  esac
+  shift
+done
+exit 1
+EOF
+  chmod +x "$rp_tmp/codex" "$rp_tmp/agy"
+  rp_out="$rp_tmp/out"; rp_prompt="$rp_tmp/prompt.md"; printf 'panel smoke question\n' > "$rp_prompt"
+  PATH="$rp_tmp:/usr/bin:/bin" "$sh_bin" "$root/scripts/run_panel.sh" --mode premium_triple "$rp_prompt" "$rp_out" >/dev/null 2>&1
+  rp_rc=$?
+  if [ "$rp_rc" -eq 0 ] && grep -q '^REALIZED_PANEL_STATE=PREMIUM' "$rp_out/manifest.txt" 2>/dev/null; then
+    ok "run_panel premium_triple with healthy fakes -> exit 0, REALIZED=PREMIUM"
+  else bad "run_panel healthy-fakes run broken (rc=$rp_rc)"; fi
+  if grep -q '^CODEX_SECONDS=' "$rp_out/manifest.txt" 2>/dev/null && \
+     grep -q '^PROMPT_BYTES=' "$rp_out/manifest.txt" 2>/dev/null; then
+    ok "run_panel manifest records timing + byte accounting"
+  else bad "run_panel manifest missing timing/byte fields"; fi
+  # Wide panel: premium_wide must realize PREMIUM with TWO Opus panelists (self-consistency seat).
+  PATH="$rp_tmp:/usr/bin:/bin" "$sh_bin" "$root/scripts/run_panel.sh" --mode premium_wide "$rp_prompt" "$rp_out" >/dev/null 2>&1
+  rp_rc=$?
+  if [ "$rp_rc" -eq 0 ] && grep -q '^REALIZED_PANEL_STATE=PREMIUM' "$rp_out/manifest.txt" 2>/dev/null && \
+     grep -q '^OPUS_PANELISTS=2' "$rp_out/manifest.txt" 2>/dev/null; then
+    ok "run_panel premium_wide -> PREMIUM with OPUS_PANELISTS=2 (wide round)"
+  else bad "run_panel premium_wide broken (rc=$rp_rc)"; fi
+  # Runtime degrade: codex fails mid-run -> honest manifest + exit 13 without FUSION_ALLOW_DEGRADED.
+  cat > "$rp_tmp/codex" <<'EOF'
+#!/usr/bin/env bash
+if [ "${1:-}" = "--version" ]; then echo "codex fake"; exit 0; fi
+cat >/dev/null; echo "boom: rate limited" >&2; exit 1
+EOF
+  chmod +x "$rp_tmp/codex"
+  PATH="$rp_tmp:/usr/bin:/bin" "$sh_bin" "$root/scripts/run_panel.sh" --mode premium_triple "$rp_prompt" "$rp_out" >/dev/null 2>&1
+  rp_rc=$?
+  if [ "$rp_rc" -eq 13 ] && grep -q '^REALIZED_PANEL_STATE=DEGRADED_OPUS_GEMINI' "$rp_out/manifest.txt" 2>/dev/null; then
+    ok "run_panel runtime failure -> exit 13 + honest DEGRADED manifest (no silent degrade)"
+  else bad "run_panel runtime-degrade gate broken (rc=$rp_rc, want 13)"; fi
+  PATH="$rp_tmp:/usr/bin:/bin" FUSION_ALLOW_DEGRADED=1 "$sh_bin" "$root/scripts/run_panel.sh" --mode premium_triple "$rp_prompt" "$rp_out" >/dev/null 2>&1
+  rp_rc=$?
+  if [ "$rp_rc" -eq 0 ]; then ok "run_panel accepts runtime degrade with explicit FUSION_ALLOW_DEGRADED=1"
+  else bad "run_panel explicit-degrade path broken (rc=$rp_rc)"; fi
+  # Plausibility floor: a tiny error-banner "answer" must count as a FAILED panelist, not a healthy one.
+  cat > "$rp_tmp/codex" <<'EOF'
+#!/usr/bin/env bash
+if [ "${1:-}" = "--version" ]; then echo "codex fake"; exit 0; fi
+out=""; prev=""
+for a in "$@"; do [ "$prev" = "-o" ] && out="$a"; prev="$a"; done
+cat >/dev/null; [ -n "$out" ] && printf 'err\n' > "$out"; exit 0
+EOF
+  chmod +x "$rp_tmp/codex"
+  PATH="$rp_tmp:/usr/bin:/bin" "$sh_bin" "$root/scripts/run_panel.sh" --mode premium_triple "$rp_prompt" "$rp_out" >/dev/null 2>&1
+  rp_rc=$?
+  if [ "$rp_rc" -eq 13 ] && grep -q '^REALIZED_PANEL_STATE=DEGRADED_OPUS_GEMINI' "$rp_out/manifest.txt" 2>/dev/null; then
+    ok "run_panel treats a tiny error-banner output as a FAILED panelist (plausibility floor)"
+  else bad "run_panel plausibility floor broken (rc=$rp_rc, want 13)"; fi
+  rm -rf "$rp_tmp"
 fi
 
 echo "-- selection_lint .fusionignore gate (S012) --"

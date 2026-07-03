@@ -12,3 +12,6 @@ __pycache__/
 /handoffs/
 /.fusion/
 /.fusion-worktrees/
+
+# Runtime logs (may contain key material, e.g. logs/security/.security-key) — never commit
+/logs/

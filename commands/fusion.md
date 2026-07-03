@@ -31,18 +31,29 @@ prompt to a file, then launch all panelists concurrently in one turn:
 
 Run the CLI panelists with your **Bash tool in background mode** (`run_in_background: true`) — the script
 waits on both CLIs internally, so background mode is what lets the call return immediately instead of
-blocking your turn:
+blocking your turn. **Use a fresh `mktemp -d` out dir, never a fixed path** — fixed paths make two
+concurrent sessions clobber each other's in-flight outputs (and are world-readable on shared hosts):
 
 ```bash
-bash <skill-root>/scripts/run_triple_fusion.sh /tmp/pfo_fusion_prompt.txt /tmp/pfo_fusion_out medium
+out=$(mktemp -d "${TMPDIR:-/tmp}/fusion.XXXXXX")
+# write the panel prompt to "$out/prompt.md", then:
+bash <skill-root>/scripts/run_triple_fusion.sh "$out/prompt.md" "$out" medium
 ```
 
 In the **same turn** (while that runs), spawn the **Opus 4.8 panelist** yourself via the `Agent`/`Task`
 tool (`subagent_type: general-purpose`) with the *same* prompt — so all three run at once. The script
 cannot spawn Opus, and **only you can judge** (the pipeline can't be reversed). For `OPUS_ONLY`, spawn
-**two** cold Opus subagents. When the background task finishes, read `/tmp/pfo_fusion_out/manifest.txt`
+**two** cold Opus subagents.
+
+If `$ARGUMENTS` contains `--wide`, run the **wide panel** instead: launch the CLIs via
+`run_panel.sh --mode premium_wide` and spawn **two** cold Opus panelists (4 answers total). Same cost
+class as ultra's round 1; use when the user wants maximum quality on a single-round question. Check
+`OPUS_PANELISTS` in the manifest — it tells you how many Opus panelists to spawn in every mode. When the background task finishes, read `"$out"/manifest.txt`
 and judge/disclose its **`REALIZED_PANEL_STATE`** (a failed/absent CLI panelist is treated as absent,
-never silent agreement). Never paste one panelist's output into another's prompt.
+never silent agreement). **Exit 13 means a panelist failed at runtime** and `FUSION_ALLOW_DEGRADED` was
+not set: STOP, tell the user the realized state from the manifest, and let them choose retry vs. accept
+the degraded panel — do not silently continue. The script also writes `ledger.env` with `RUN_ID` /
+`RUN_DIR` for the local v2 run ledger. Never paste one panelist's output into another's prompt.
 
 ## Step 2 — Judge (Opus 4.8)
 

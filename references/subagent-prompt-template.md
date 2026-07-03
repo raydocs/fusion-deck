@@ -19,6 +19,8 @@ Discoveries (things you wouldn't easily find yourself):
 
 Boundary: Do ONLY <X>. Stop when <X> is done. Do not refactor adjacent code.
 Do the work yourself — do NOT spawn your own subagents.
+If you hit a decision this brief doesn't resolve (an ambiguity, a trade-off, an unexpected conflict),
+STOP and report it back — do not pick an interpretation and build on it.
 When done, report: the files you changed and one line of evidence per Done-when.
 ```
 
@@ -62,7 +64,10 @@ latitude:
 > must be resolved, every touched component identified, and every behavioral change specified precisely.
 
 If you *can't* resolve a decision, that's a signal the **plan** isn't ready — run the `/fusion-plan`
-clarify gate first, don't push an ambiguous brief and hope. And "resolve every decision" never means
+clarify gate first, don't push an ambiguous brief and hope. The mirror rule
+(`orchestration-rubric.md`): judgment never delegates — a worker that meets an unresolved decision
+mid-task surfaces it up and stops, because a plausible-but-wrong interpretation compounds in everything
+built on top of it. And "resolve every decision" never means
 *fabricate*: in an unfamiliar domain (medical, legal, financial, compliance, an unknown data format), the
 resolution is to **inspect authoritative evidence or pause** — never invent a domain rule. Pair an
 ambiguous high-risk item with a Discovery Gate (`commands/fusion-plan.md`), not a confident guess.

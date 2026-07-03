@@ -16,6 +16,24 @@ disclosed**, never silently faked. This is the skill's cardinal rule.
   - a CLI missing **and `FUSION_ALLOW_DEGRADED=1`** → exit `0`, prints a loud `DEGRADED=1 MISSING=… ` banner
     and the actual `PANEL_STATE`. The run proceeds, knowingly degraded.
 
+## Runtime degrade (exit 13)
+
+The assert gate only proves the CLIs *existed at launch*. A panelist can still fail **during** the run —
+rate limit, auth error, `FUSION_PANEL_TIMEOUT` (default 600s) kill, or an implausibly tiny output
+(below `FUSION_MIN_OUTPUT_BYTES`, default 200 — an error banner is not an answer). When that happens and
+`FUSION_ALLOW_DEGRADED` is not set, `run_panel.sh` / `run_triple_fusion.sh` write the manifest with the
+honest `REALIZED_PANEL_STATE` and exit **13**. The orchestrator must then STOP, disclose the realized
+state, and let the user choose: retry, or re-run accepting the degraded panel with
+`FUSION_ALLOW_DEGRADED=1`. Exit 13 is never a silent continue.
+
+## Recursion guard (exit 14)
+
+A panelist must never convene its own panel — nested panels break the blindness invariant and can loop.
+The runners stamp the panelist process tree with `FUSION_PANEL_CHILD=1`; every gate/runner script
+refuses with exit **14** when it sees that marker. The Opus panelist (a spawned subagent, no env
+inheritance) is bound by the instruction in `panel-prompt.md`: it answers directly and never invokes
+fusion commands.
+
 ## The disclosure rule
 Every panel answer's audit trail begins with the realized panel (provenance header in
 `judge-rubric.md`): which `PANEL_STATE`/slug ran and which panelists participated. A degraded answer must

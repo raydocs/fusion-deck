@@ -81,10 +81,12 @@ if [ "${#changed[@]}" -eq 0 ]; then
   note "no ${mode} changes to check"
 fi
 
-# 1) Whitespace / conflict-marker damage.
-if "${check_cmd[@]}" >/tmp/pfo_preflight_ws.txt 2>&1; then ok "whitespace clean ($mode)"
-else bad "whitespace/conflict-marker issues:"; sed 's/^/        /' /tmp/pfo_preflight_ws.txt; fi
-rm -f /tmp/pfo_preflight_ws.txt
+# 1) Whitespace / conflict-marker damage. (mktemp, not a fixed /tmp name: two concurrent preflights —
+# or two users on one host — must not clobber each other's scratch file.)
+ws_tmp="$(mktemp "${TMPDIR:-/tmp}/pfo_preflight_ws.XXXXXX")"
+if "${check_cmd[@]}" >"$ws_tmp" 2>&1; then ok "whitespace clean ($mode)"
+else bad "whitespace/conflict-marker issues:"; sed 's/^/        /' "$ws_tmp"; fi
+rm -f "$ws_tmp"
 
 # 2) Secret FILENAME deny-globs on the changed file list. Guard the expansion — an empty array under
 # `set -u` is an "unbound variable" error in bash 3.2.
