@@ -8,6 +8,36 @@
 
 It is Markdown procedures plus Bash / Python helpers—not an MCP server, model dashboard, or OpenRouter replacement.
 
+## Why a panel — the measured part
+
+OpenRouter benchmarked this panel *shape* on **DRACO** (deep research, 100 tasks across 10 domains). Their numbers, for their Fusion pipeline, on the models of that era — fusion-deck runs the same shape locally but has **not** been independently benchmarked (different judge scaffolding, CLI-subscription model variants, and the seats now run newer models):
+
+| Setup | DRACO | vs. best solo model |
+| --- | --- | --- |
+| **The panel shape fusion-deck runs** — Claude + GPT + Gemini, Claude judges | **68.3%** | **+3.0** |
+| Claude + GPT pair, Claude judges | 67.6% | +2.3 |
+| Best frontier model, solo | 65.3% | — (baseline) |
+| GPT seat's model, solo | 60.0% | −5.3 |
+| Judge's own model, solo | 58.8% | −6.5 |
+
+Read it from the bottom up: the panel beats the **best** of its own members by 3 points, and beats its *average* member by far more — the judge's own model gains ~9.5 points from sitting on a panel instead of answering alone. Even the **same model run twice** cold and judged gains ~6.7. Independent tries catch each other's mistakes; that is the whole product.
+
+*Data: OpenRouter, "[Fusion beats frontier](https://openrouter.ai/blog/announcements/fusion-beats-frontier/)". fusion-deck runs the panel via your own Claude / `codex` / `agy` subscriptions — no router, nothing leaves for a third party.*
+
+## What a panel catches that one model reliably misses
+
+These are mechanisms, not marketing — each maps to a specific instruction in `references/`:
+
+- **Confident stale facts.** Models share training-data errors, so one model asking itself twice tends to agree with itself. A cross-family panelist that actually read the source contradicts the recitation, and the judge is instructed to settle it by **running the cheap check** — never by headcount (`judge-rubric.md`: "headcount is not adjudication").
+- **Wrong-premise answers.** A single model usually answers *inside* your question's framing, even when the framing is the bug. Every panelist here is explicitly licensed to say "the premise is mistaken" instead of answering within it (`panel-prompt.md`).
+- **Review blind spots.** In `/fusion-review`, findings that **two reviewers hit independently** are near-certain real (consensus = precision); findings only **one** family notices are exactly the ones a single reviewer run would have missed (unique insights = coverage). Disagreements don't get averaged away — the judge reads the disputed `file:line` and rules (in one internal run, two seats disagreed on whether a bare `except:` was intentional; the judge read the line — it swallowed `KeyboardInterrupt`).
+- **Self-serving synthesis.** The judge writes its five-section analysis (consensus / contradictions / partial coverage / unique insights / blind spots) *before* drafting the final answer, so it can't decide first and rationalize after.
+- **Fake panels.** A seat that errored, timed out, or returned a byte-sized error banner is reported **absent** — the answer must disclose the realized `PANEL_STATE` and the actual models that answered. Degraded runs never masquerade as premium.
+
+## When it pays for itself
+
+A panel costs roughly 3 model calls and a few minutes; it is priced for decisions where being wrong costs hours or days — an architecture choice you'd live with for months, a security-sensitive diff, a root cause you're about to "fix" at the wrong layer. For those, one avoided wrong call covers a long tail of panels. For trivia and routine edits, the skill's own router says: don't convene a panel — answer directly (`/fusion-auto` routes low-risk work to a single model by design).
+
 ## What ships
 
 <!-- SYNCED FROM SKILL.md routing table — edit there first. -->
