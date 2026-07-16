@@ -173,6 +173,25 @@ bash ~/.claude/skills/fusion-deck/scripts/smoke_test.sh     # offline self-check
 /fusion-handoff the auth refactor
 ```
 
+## The three lineages
+
+fusion-deck fuses three lineages into one skill:
+
+- **Panel → judge** (from fusion-fable): the same prompt goes to several models **at once and blind**,
+  then **Opus 4.8 always judges** and writes the final answer. The pipeline can't be reversed.
+- **Contract + honesty** (from the goal-meta lineage): an objective, **finishing criteria defined before
+  work**, honest status states, and an **escape hatch** — emitted as a *Claude Code Workflow Contract*.
+  This skill does **not** use Codex's `/goal` (Claude Code has no such tool).
+- **Context + orchestration** (from RepoPrompt CE): a curated **Context Pack**, a **shared plan**,
+  **scoped subagent briefs**, **verify-then-dispatch-fresh**, and a **Handoff Capsule** — plus its richer
+  workflow shapes: evidence-first **investigation**, a measured **optimize** loop, behavior-preserving
+  **refactor**, a tree-sitter→ctags→grep **codemap**, evidence-gated **context discovery**, and
+  **worktree** isolation. Every "ask the oracle" becomes "ask the panel."
+
+Cognition/Devin measured that delegation backfires when subtle intent matters — which is why the
+orchestrator keeps judgment and never implements, and why codemap/export stay thin helpers rather than a
+mini-RepoPrompt.
+
 ## Good to know
 
 - **Where the savings come from.** It reuses the subscriptions you're already logged into (Claude /

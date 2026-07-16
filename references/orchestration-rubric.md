@@ -23,13 +23,12 @@ never the session's accumulated history.
 
 The role split cuts both ways: the orchestrator never implements, and **subagents never make judgment
 calls**. Interpretation of an ambiguous requirement, a trade-off between approaches, scope decisions, and
-the **final review** stay with the orchestrator — always. This isn't about model capability (Cognition's
-Devin Fusion team measured it: delegation "backfires when subtle intent matters"); a subagent lacks the
-conversation's full intent, so it resolves ambiguity plausibly-but-wrong and then builds on it. When a
-brief would require the subagent to *decide* rather than *execute*, the decomposition is wrong: resolve
-the ambiguity yourself first (ask the user or open the panel if it's a genuine decision point), then
-dispatch a brief that only executes. A subagent that hits an unforeseen judgment call must surface it
-**up**, not resolve it unilaterally — say so in the brief.
+the **final review** stay with the orchestrator — always. Delegation backfires when subtle intent matters
+(Cognition/Devin measurement); a subagent lacks the conversation's full intent, so it resolves ambiguity
+plausibly-but-wrong and then builds on it. When a brief would require the subagent to *decide* rather than
+*execute*, the decomposition is wrong: resolve the ambiguity yourself first (ask the user or open the panel
+if it's a genuine decision point), then dispatch a brief that only executes. A subagent that hits an
+unforeseen judgment call must surface it **up**, not resolve it unilaterally — say so in the brief.
 
 ## Phases
 

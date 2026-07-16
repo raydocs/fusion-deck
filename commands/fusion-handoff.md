@@ -19,24 +19,21 @@ contain the literal phrase "code review"). Strip any "make me a handoff for X" m
 
 ## Step 2 — Compose the capsule
 
-Write to a unique repo-local file `handoffs/<YYYY-MM-DD>-<HH-MM>-<type>-<slug>.md` with these sections
-(see `references/handoff-capsule.md`):
+Write to a unique repo-local file `handoffs/<YYYY-MM-DD>-<HH-MM>-<type>-<slug>.md` with the sections
+defined in `handoff-capsule.md` (name them in one line): **Purpose · Contract Snapshot · Summary · Files
+Created/Changed · Verification Results · Known Risks · Next Steps**. Section bodies and acceptance bar
+live only in that reference.
 
-- **Purpose** — the goal in the codebase's own terms (1–2 sentences).
-- **Contract Snapshot** — for a Plan/orchestrate handoff: the contract path, objective vs current state,
-  per-item statuses, blockers / `[incomplete]` payloads, and escape-hatch state (else "none — standalone").
-  This is what lets the live state survive a compaction.
-- **Summary** — what was done / decided, in your own voice.
-- **Files Created / Changed** — paths, each with a one-line "what & why" and `file:line` where useful.
-- **Verification Results** — what you ran and what you observed (commands + outcomes). Report failures and
-  skips honestly; mark anything unverified. **If the handed-off work includes code that will be
-  committed/pushed, run the ship-gate first** and record its result here:
-  `bash <skill-root>/scripts/preflight.sh commit` (or `push <base>`) — whitespace + staged-index secret
-  scan, honest-degrade to a regex floor without `gitleaks`. Note the realized `PREFLIGHT_SECRETSCAN`; a
-  `FAIL` is a known risk the next person must clear, not something to bury. If the secret-scan helper can't run, disclose it and scan manually; never skip silently.
-- **Known Risks** — what's fragile, assumed, or unproven; anything that could bite the next person.
-- **Next Steps** — the concrete next actions, ordered; open questions **only if** they block or shape the
-  next move.
+**Ship-gate when handing off code that will be committed/pushed** — run first and record the result under
+Verification Results:
+
+```bash
+bash <skill-root>/scripts/preflight.sh commit   # or: push <base>
+```
+
+Whitespace + staged-index secret scan, honest-degrade to a regex floor without `gitleaks`. Note the
+realized `PREFLIGHT_SECRETSCAN`; a `FAIL` is a known risk the next person must clear, not something to bury.
+If the secret-scan helper can't run, disclose it and scan manually; never skip silently.
 
 **Merge, don't append:** extract the architectural bones in your own words — **no transcript dumps, no
 raw subagent output**. A reader unfamiliar with the area must be able to execute from it.

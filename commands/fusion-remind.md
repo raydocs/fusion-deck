@@ -10,8 +10,8 @@ instead of opening the panel, forgets to disclose which models actually ran, ski
 starts editing code from inside the orchestrator. This command spends no panel and no subagent: it just
 reprints the map and the invariants so you (or a fresh agent) snap back to the right move.
 
-Load `references/reminder.md` and emit the cheat-sheet below. If `$ARGUMENTS` names a situation, also point
-to the one command that fits and why — one line, then stop.
+Emit the cheat-sheet below (self-contained; no reference load at runtime). If `$ARGUMENTS` names a
+situation, also point to the one command that fits and why — one line, then stop.
 
 ## Situation → command (offer, don't auto-run the panel)
 
@@ -45,3 +45,5 @@ For a quick factual question, just answer — don't route a trivial ask into a p
 9. **Honest-degrade beyond the panel.** Helpers disclose state and fall back loudly (`codemap` / selection lint / opt-in flags) — use the best available, say what ran.
 
 This is a reminder, not a workflow — it ends here. Pick the command above and go.
+
+<!-- Rationale for this command's design: `references/reminder.md` (not needed at runtime). -->

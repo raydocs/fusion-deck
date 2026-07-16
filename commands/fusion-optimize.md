@@ -5,39 +5,31 @@ argument-hint: [what to optimize: metric + scope + stop criterion] [--cap N iter
 
 # /fusion-optimize
 
-Make something **measurably** faster, smaller, or cheaper without guessing. The loop is the point: define
-one metric and a stop criterion, establish a baseline, then change **one attributed thing at a time** and
-re-measure — and let the **panel**, not your gut, call continue / stop / try-next at each decision point.
-**No baseline → no optimization claim.** Like `/fusion-orchestrate`, you coordinate and verify; the actual
-changes happen inside Task subagents.
-
-Load `references/optimize-scoreboard.md` (the scoreboard + loop discipline).
+Measurable speed/size/cost — no guessing. **No baseline → no optimization claim.** You coordinate; changes
+land inside Task subagents. Loop discipline: `references/optimize-scoreboard.md`.
 
 ## Step 1 — Define the metric & stop criterion
 
-Name the single metric (p95 latency / wall-clock / bundle bytes / test runtime / allocations), the exact
-**probe command** that measures it, the scope, and the stop criterion — a target value, diminishing
-returns, or an iteration cap (default 5; override with `--cap N`). If the user gave no metric, ask one
-narrow question; don't invent one.
+One metric, exact probe command, scope, stop criterion (target / diminishing returns / cap; default 5;
+`--cap N`). If no metric given, ask one narrow question. Details: scoreboard § Step 1.
 
 ## Step 2 — Baseline (before any change)
 
-Instrument behind a debug/test gate — **never in the measured hot path**, never in prod. Run the probe
-**3–5 times**, record the values and their variance in the scoreboard. This baseline is the only thing a
-later "we improved it" can be true against.
+Instrument behind a debug/test gate — **never in the hot path / prod**. Run probe **3–5×**; record as
+iteration `0` (scoreboard § Steps 2–3).
 
 ## Step 3 — Loop: plan → change → re-measure → decide
 
-Each iteration: (1) plan **one** candidate change grounded in the bottleneck evidence — single model, this
-is routine; (2) dispatch a **fresh Task subagent** to land it and keep tests green; (3) re-run the probe
-(same 3–5 samples); (4) append an attributed row to the scoreboard (change · metric · delta vs baseline ·
-kept/reverted); (5) at the **decision point**, run the `/fusion` panel procedure (read
-`<skill-root>/commands/fusion.md`) on "did this earn its keep, what next, are we done?" — the one place a
-panel is worth it in a loop. Hard-fail unless PREMIUM or `FUSION_ALLOW_DEGRADED=1`; on exit 13 STOP and disclose the realized `PANEL_STATE` from the manifest — never silently continue (`references/degraded-mode.md`). **Don't feed raw logs to the panel** — pass the scoreboard and the diff.
+Each iteration: (1) plan **one** change grounded in bottleneck evidence (single-model); (2) fresh Task
+subagent lands it, tests green;
+(3) re-run probe 3–5×; (4) append scoreboard row; (5) at the **decision point**, run `/fusion` (read
+`<skill-root>/commands/fusion.md`) on continue/stop/next. Hard-fail unless PREMIUM or
+`FUSION_ALLOW_DEGRADED=1`; exit 13 → STOP and disclose `PANEL_STATE` (`references/degraded-mode.md`).
+**Pass scoreboard + diff only — no raw logs** (scoreboard § Step 6).
 
-Stop when the target is met, returns diminish, or the cap is hit. Revert any change that didn't beat noise.
+**Keep only what beats noise; revert the rest** (scoreboard § Step 5). Stop at target, diminishing
+returns, or hard cap (scoreboard § Hard iteration cap).
 
 ## Present
 
-The scoreboard path, baseline → best metric (with variance), the changes that stuck, and the realized
-`PANEL_STATE` at the decision points. Note anything left on the table.
+Scoreboard path, baseline → best (with variance), kept changes, realized `PANEL_STATE`. Note leftovers.

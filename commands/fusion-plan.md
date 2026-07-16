@@ -42,24 +42,10 @@ and never silently guess. Two cases:
 ## Step 2 — Write the contract
 
 Define **finishing criteria before the work**. Emit the file (default `docs/plans/<topic>-<DATE>.md`, or a
-path the user gives) with these sections (see `references/workflow-contract.md`):
-
-- **Objective** — what should become true (one or two sentences).
-- **Finishing Criteria** — concrete, *verifiable* signals (a test, a grep, an observable output) — not
-  "works" / "clean".
-- **Current State** — the ledger: what is currently true, distinct from the objective.
-- **Constraints** *(recommended)* — invariants that must NOT change (public APIs, data shapes, deps, style,
-  branch, secrets), one bullet each or `none`.
-- **Boundaries** *(recommended)* — the write boundary: dirs/globs the work may modify and the **forbidden**
-  paths. Never "edit anything" (a hard lint error). Pairs with `.fusionignore`.
-- **Work Items** — each a `###` subsection with `Goal / Done-when / Key files / Dependencies / Size /
-  Status`. Decompose to **natural granularity (2–3 items, cap 5)**; combine if you reach for more.
-- **Escape Hatch** — the pause conditions (validation contradicts the goal, repo disagrees with the plan,
-  looping without progress, risk to durable work, scope change).
-- **Verifier Plan** — the narrowest concrete probe per item.
-- (optional) **References** — `file:line` pointers, links.
-
-Use the honest status vocabulary `[todo]/[doing]/[done]/[blocked]/[incomplete]/[abandoned]`.
+path the user gives) with the sections defined in `workflow-contract.md` (name them in one line):
+**Objective · Finishing Criteria · Current State · Constraints* · Boundaries* · Work Items · Escape Hatch ·
+Verifier Plan · (optional) References** (* = recommended). Section semantics, field shapes, status
+vocabulary, and granularity live only in that reference — do not re-prose them here.
 
 **Discovery-first for unfamiliar / high-risk domains.** If the task sits in a domain you can't ground from
 the repo alone — medical, legal, financial, security/compliance, tax, a complex data format, copyrighted

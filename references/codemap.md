@@ -69,9 +69,5 @@ sharper map wherever a richer parser happens to be installed, without changing h
 
 ## Deliberately NOT a mini-RepoPrompt
 
-This is **not** a port of RepoPrompt's tree-sitter engine, and it is not trying to become one.
-`context-pack-format.md` states the caution plainly — a dedicated builder risks a "mini-RepoPrompt." So
-`codemap.sh` stays a **thin, optional helper**: a robust zero-dependency floor that anyone can run, with
-opt-in upgrades when a better parser is already on the machine. The value is the honest tiering and the
-disclosed `CODEMAP_STATE`, not a heavy bundled engine. If you need RepoPrompt-grade extraction, install
-`tree-sitter` and the script will use it — but the skill never ships or depends on one.
+`codemap.sh` is a thin, optional helper (honest `CODEMAP_STATE` tiering; zero-dep REGEX floor + opt-in
+upgrades) — not a port of RepoPrompt's tree-sitter engine.

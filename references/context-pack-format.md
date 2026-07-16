@@ -4,10 +4,9 @@ A Context Pack is a single curated file that another agent (or model) consumes t
 **curation is the bottleneck.** Don't dump the repo; assemble the right files at the right density, in a
 fixed order, under an explicit token budget.
 
-By default this is **prompt-driven with an executable recipe** — you (the model) run the bash below and
-emit the file. An **optional** agentic `--discover` mode (evidence-gated; see
-`references/context-discovery.md`) proposes a reviewable selection manifest instead — it stays a thin,
-lint-checked helper rather than a mini-RepoPrompt.
+By default this is **prompt-driven** — `/fusion-context` runs the token-estimate recipe and emits the
+file. An **optional** agentic `--discover` mode (evidence-gated; see `references/context-discovery.md`)
+proposes a reviewable selection manifest instead — a thin, lint-checked helper, not a mini-RepoPrompt.
 
 ## Fixed section order
 
@@ -43,14 +42,9 @@ File: path/to/file.py
   path)`). On re-build, re-find the anchor and re-slice around it; if the anchor is gone, the slice is
   stale — regenerate it (or downgrade the file to codemap) rather than pasting now-wrong line ranges.
 - **Codemap** (signatures only) — peripheral orientation files: `Imports:` bullets + class/function/type
-  signatures, **no bodies**. Generate with the honest-degrade helper (tree-sitter → ctags → grep; discloses
-  `CODEMAP_STATE`):
-  ```bash
-  bash <skill-root>/scripts/codemap.sh path/to/file
-  ```
-  Its zero-dependency floor is the same grep heuristic
-  `grep -nE '^(import |from |class |def |func |type |interface |export )' path/to/file`; ctags and
-  tree-sitter are auto-detected upgrades. See `references/codemap.md`.
+  signatures, **no bodies**. Generate via `scripts/codemap.sh` (tree-sitter → ctags → grep; discloses
+  `CODEMAP_STATE` — see `references/codemap.md`). Zero-dependency floor:
+  `grep -nE '^(import |from |class |def |func |type |interface |export )' path/to/file`.
 - **Tree-only** — the path appears in `file_map`; no content block.
 
 In `file_map`, mark any path that also has a **codemap block** in `file_contents` with a trailing ` +`
@@ -68,25 +62,14 @@ src/
 ## Token budget (enforced)
 
 Pick a budget by consumer: **paste** ≈24–32k · **handoff** ≈60k · **agent working** ≈120–160k tokens.
-Estimate with the cheap heuristic `ceil(utf8_bytes / 4 * 1.05)` — no real tokenizer:
-
-```bash
-est() { python3 -c "import math,sys; print(math.ceil(int(sys.argv[1])/4*1.05))" "$(wc -c < "$1")"; }
-est path/to/file        # tokens for one file
-```
-
-Sum the selection. If over budget, in this order: **prune the least-relevant files → slice large files →
-downgrade full→codemap** until it fits. Bias to **inclusion** when selecting (keep related files; prune
-only the clearly-unrelated), but to **concision** in prose.
+Estimate with `ceil(utf8_bytes / 4 * 1.05)` — the bash recipe lives in `/fusion-context` Step 3 (invocation
+site); no real tokenizer. Sum the selection. If over budget, in this order: **prune the least-relevant
+files → slice large files → downgrade full→codemap** until it fits. Bias to **inclusion** when selecting
+(keep related files; prune only the clearly-unrelated), but to **concision** in prose.
 
 ### Deterministic middle-truncate
-If one file alone busts the budget, keep equal head + tail and drop the middle on a line boundary:
-
-```bash
-head -n 120 FILE > part; echo '[content truncated]' >> part; tail -n 120 FILE >> part
-```
-
-Idempotent, so the file still contributes signal without blowing the budget.
+If one file alone busts the budget, keep equal head + tail and drop the middle on a line boundary with a
+`[content truncated]` marker (idempotent; still contributes signal without blowing the budget).
 
 ### Budget ledger (optional, in `meta_prompts`)
 When a pack is near or over budget, show **what ate the budget** instead of just asserting it fit — a few

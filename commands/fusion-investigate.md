@@ -16,35 +16,30 @@ Load `references/investigation-rubric.md` (the phases + report format); if you r
 
 ## Step 1 — Triage & hypotheses
 
-Restate the symptom concretely — repro, error string, observed-vs-expected. List the **candidate
-hypotheses** up front as a short ranked set: competing explanations, not one. Keep "what's observed"
-separate from "what might cause it." Start the report file (default `docs/investigations/<topic>-<DATE>.md`).
+Restate the symptom concretely (repro, observed-vs-expected); list **2–4 ranked competing hypotheses**;
+start the report file. Full phase rules: `investigation-rubric.md` § Phase 1.
 
 ## Step 2 — Gather evidence (subagents, read-only)
 
-Dispatch `Explore`/`general-purpose` subagents to collect a concrete **evidence ledger**: the call path,
-the offending `file:line`, git blame/diff, logs, the failing test. Each entry is a fact with a location,
-not an opinion. For a big or unfamiliar surface, build a pack first with `/fusion-context` (read
-`<skill-root>/commands/fusion-context.md`). When you run several investigators in parallel, give each its
-own `## Findings: <hypothesis>` sub-section in the report to append to (no write contention), then merge
-into the ledger. Append findings to the report and mark each hypothesis the evidence **supports / weakens
-/ eliminates**.
+Dispatch read-only `Explore`/`general-purpose` subagents into an **evidence ledger** of located facts
+(`file:line` / commit / test); score each hypothesis support/weaken/eliminate. Full ledger and parallel-
+subagent rules: `investigation-rubric.md` § Phase 2. For a big surface, build a pack first with
+`/fusion-context` (read `<skill-root>/commands/fusion-context.md`).
 
 ## Step 3 — Adjudicate (panel, by exception)
 
-If the evidence cleanly points to one cause, **skip the panel** — say so and go to the report. **Only when
-two or more hypotheses genuinely survive the evidence**, run the `/fusion` panel procedure (read
-`<skill-root>/commands/fusion.md`) on the competing theories plus the evidence ledger; Opus judges Track B
-(consensus / contradictions / which cause the evidence supports / blind spots). `--panel` is the operator's
-explicit cross-check: it forces a panel even when you'd otherwise skip — to adjudicate close survivors, or to
-stress-test a root cause you think is decisive. It cross-checks the conclusion; it never replaces the
-evidence-first discipline. Hard-fail unless PREMIUM or `FUSION_ALLOW_DEGRADED=1`; on exit 13 STOP and disclose the realized `PANEL_STATE` from the manifest — never silently continue (`references/degraded-mode.md`).
+If evidence is decisive, **skip the panel** and go to the report. **Only when ≥2 hypotheses survive**, run
+the `/fusion` panel procedure (read `<skill-root>/commands/fusion.md`) on the competing theories + ledger
+(Track B). `--panel` forces the cross-check even when you'd skip. Full skip/run/disclose rules:
+`investigation-rubric.md` § Phase 3. Hard-fail unless PREMIUM or `FUSION_ALLOW_DEGRADED=1`; on exit 13 STOP
+and disclose the realized `PANEL_STATE` from the manifest — never silently continue
+(`references/degraded-mode.md`).
 
 ## Step 4 — Report
 
-Finish the report: **root cause** with its deciding `file:line` evidence, hypotheses eliminated and why,
-**honest confidence** (proven vs suspected — name the residual uncertainty), and the recommended fix(es).
-Do **not** implement here.
+Finish the report: **root cause** with deciding `file:line`, eliminated hypotheses, **honest confidence**
+(proven vs suspected), recommended fix(es). **Do not implement.** Full report shape:
+`investigation-rubric.md` § Phase 4.
 
 ## Present
 

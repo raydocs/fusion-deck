@@ -25,27 +25,25 @@ out of every pack while `!` keeps must-have docs in.
 
 ## Step 2 — Assign a density tier per file
 
-- **Full content** — true edit targets only.
-- **Line slices** — large, partially-relevant files: only the relevant ranges, each labeled
-  `(lines START-END: one-line description)`.
-- **Codemap** — peripheral orientation files: `File: <path>` + `Imports:` bullets + class/function/type
-  **signatures only**, no bodies. Generate with `bash <skill-root>/scripts/codemap.sh <path>` — a 3-tier
-  honest-degrade map (tree-sitter → ctags → grep) that discloses `CODEMAP_STATE=<TREESITTER|CTAGS|REGEX>`;
-  the grep tier is the zero-dependency floor, ctags/tree-sitter are auto-detected upgrades (see
-  `references/codemap.md`). If `codemap.sh` or `selection_lint.py` fails to RUN (script error, not lint findings), say so, do that pass manually against the reference, and label the pack's tier honestly.
-- **Tree-only** — path appears in `file_map` for structure, no content.
+Assign each selected file one density tier (**full / line-slice / codemap / tree-only**). Tier semantics,
+slice anchors, `+` legend, and codemap invocation details live only in
+`references/context-pack-format.md` § Per-file block format. For codemap-tier paths, generate with:
+
+```bash
+bash <skill-root>/scripts/codemap.sh <path>
+```
+
+It discloses `CODEMAP_STATE=<TREESITTER|CTAGS|REGEX>` (honest-degrade; see `references/codemap.md`). If
+`codemap.sh` or `selection_lint.py` fails to RUN (script error, not lint findings), say so, do that pass
+manually against the reference, and label the pack's tier honestly.
 
 ## Step 3 — Assemble in the FIXED order, under budget
 
 Emit the **fixed pack** as exactly these five sections, in order: **file_map → file_contents → git_diff →
-meta_prompts → user_instructions** (this matches RepoPrompt CE's `defaultSectionOrder`). Per-file blocks
-use `File: <path>` then a fenced code block. You MAY *additionally* duplicate `user_instructions` as an
-optional preface at the very top (a primacy hedge) — it sits **above** the fixed five, not inside them.
-Mark codemap-tier paths in `file_map` with a trailing ` +` and include the legend line
-`(+ denotes code-map available)`; format details in `references/context-pack-format.md`.
+meta_prompts → user_instructions** (format, optional preface, and `+` legend only in
+`context-pack-format.md`). Per-file blocks use `File: <path>` then a fenced code block.
 
-Pick a budget by who consumes the pack: **paste** ≈24–32k, **handoff** ≈60k, **agent** ≈120–160k tokens.
-Estimate tokens with the cheap heuristic `ceil(utf8_bytes / 4 * 1.05)` — run it with bash, no tokenizer:
+Pick a budget by consumer (**paste / handoff / agent** — numbers in the reference). Estimate tokens with:
 
 ```bash
 bytes=$(wc -c < FILE); python3 -c "import math,sys; print(math.ceil(int(sys.argv[1])/4*1.05))" "$bytes"
@@ -53,7 +51,11 @@ bytes=$(wc -c < FILE); python3 -c "import math,sys; print(math.ceil(int(sys.argv
 
 Sum the selection; if over budget, **prune the least-relevant, slice large files, or downgrade full→
 codemap** until it fits. For a single file that alone busts the budget, **middle-truncate**
-deterministically: keep equal head+tail, insert a `[content truncated]` marker on a line boundary.
+deterministically (equal head+tail, line boundary):
+
+```bash
+head -n 120 FILE > part; echo '[content truncated]' >> part; tail -n 120 FILE >> part
+```
 
 ## Step 4 — Safety & persist
 

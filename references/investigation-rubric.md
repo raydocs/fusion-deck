@@ -116,16 +116,9 @@ Finish the report so it stands on its own:
 
 ## Principles
 
-- **Evidence over assertion.** A located fact outranks a confident narrative, regardless of how plausible
-  the narrative is. The ledger is the argument.
-- **Never assert a cause without a location.** No `file:line` / commit / failing test → it's a hypothesis,
-  not a root cause. This is the gate; honor it everywhere.
-- **Keep what you ruled out.** Eliminated hypotheses with their deciding evidence are results — they stop
-  the next reader (or the next you) from re-chasing a dead end.
-- **Panel by exception, disclosed honestly.** Skip it when the evidence is decisive; run it only when ≥2
-  hypotheses survive; always disclose the realized `PANEL_STATE`. A missing panelist is **absent, never
-  silent agreement.**
-- **Confidence is part of the finding.** Proven vs suspected, with the residual uncertainty named. Honest
-  "suspected, here's what would confirm it" beats a falsely-certain "proven."
-- **Investigate, don't fix.** The deliverable is the grounded cause and a recommendation — implementing is
-  a separate, later command.
+(Phase rules above are authoritative; these are the load-bearing one-liners only.)
+
+- **Evidence over assertion; no location → not a root cause.** The ledger is the argument.
+- **Panel by exception, disclosed honestly** — skip when decisive; ≥2 survivors or `--panel`; missing
+  panelist = absent, never agreement.
+- **Investigate, don't fix** — grounded cause + recommendation; confidence is proven vs suspected.

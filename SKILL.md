@@ -1,20 +1,6 @@
 ---
 name: fusion-deck
-description: >-
-  Higher-confidence answers and careful execution for Claude Code. `/fusion` asks a panel of top models —
-  Opus 4.8 + GPT-5.6 Sol (via the codex CLI) + Gemini 3.1 Pro (via Antigravity CLI `agy`, with legacy
-  `gemini` as an explicit opt-in) — the same question in
-  parallel, then Opus 4.8 judges all answers and writes one cross-checked answer; `/fusion-review` audits
-  code or a plan the same way and returns one prioritized findings list. v2 adds `/fusion-auto` for
-  explainable routing and `/fusion-ultra` for two-round maximum-quality synthesis. Companion commands: `/fusion-plan`
-  turns a vague request into a verifiable plan, `/fusion-context` builds a token-budgeted context pack,
-  `/fusion-orchestrate` decomposes a task into verified sub-agent steps, `/fusion-handoff` writes a clean
-  handoff. The panel always discloses which models actually answered (it never fakes the full panel). Use
-  whenever the user wants a multi-model / panel / ensemble answer, a hard question cross-checked across
-  models, a higher-confidence answer with blind spots surfaced, a vague ask turned into a plan, a curated
-  context pack, a task orchestrated with verification, or a handoff — e.g. "run it through fusion",
-  "fusion-review this", "fusion-plan", "fusion-context", "fusion-orchestrate", "fusion-handoff". Best for
-  high-stakes, contested, or hard-to-reverse work where being confidently wrong is expensive.
+description: Higher-confidence answers and careful execution. `/fusion` fans a hard question to a panel of top models and writes one judged cross-checked answer; `/fusion-review` audits the same way. Companions: `/fusion-auto` `/fusion-ultra` `/fusion-investigate` `/fusion-plan` `/fusion-context` `/fusion-orchestrate` `/fusion-optimize` `/fusion-refactor` `/fusion-handoff` `/fusion-remind`. Always discloses which models answered. Use whenever the user wants a multi-model / panel / ensemble answer — e.g. "run it through fusion", "fusion-review this", "fusion-plan", "fusion-context", "fusion-orchestrate", "fusion-handoff". Best for high-stakes, contested, or hard-to-reverse work.
 ---
 
 # fusion-deck
@@ -27,16 +13,8 @@ There is no MCP server, no UI, no OpenRouter, no model-config platform.
 
 ## The three lineages it fuses
 
-- **Panel → judge** (from fusion-fable): the same prompt goes to several models **at once and blind**,
-  then **Opus 4.8 always judges** and writes the final answer. The pipeline can't be reversed.
-- **Contract + honesty** (from the goal-meta lineage): an objective, **finishing criteria defined before
-  work**, honest status states, and an **escape hatch** — emitted as a *Claude Code Workflow Contract*.
-  This skill does **not** use Codex's `/goal` (Claude Code has no such tool).
-- **Context + orchestration** (from RepoPrompt CE): a curated **Context Pack**, a **shared plan**,
-  **scoped subagent briefs**, **verify-then-dispatch-fresh**, and a **Handoff Capsule** — plus its richer
-  workflow shapes: evidence-first **investigation**, a measured **optimize** loop, behavior-preserving
-  **refactor**, a tree-sitter→ctags→grep **codemap**, evidence-gated **context discovery**, and
-  **worktree** isolation. Every "ask the oracle" becomes "ask the panel."
+It fuses three lineages — **panel→judge** (fusion-fable), **contract+honesty** (goal-meta; not Codex
+`/goal`), and **context+orchestration** (RepoPrompt CE) — see README → "The three lineages".
 
 ## The panel and its honest-degrade rule
 

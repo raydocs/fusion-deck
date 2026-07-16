@@ -10,8 +10,9 @@ Use the v2 router instead of manually choosing a fusion command. This command do
 task, chooses a workflow, records a run ledger entry, verifies when possible, and escalates only when the
 workflow's policy says the cheaper path is not enough.
 
-Load `references/router-policy.md`, `references/panel-modes.md`, `references/run-ledger.md`,
-`references/verifier-contract.md`, and `references/verifier-recipes.md`.
+Load `references/router-policy.md` and `references/panel-modes.md` up front. Load
+`references/verifier-contract.md` / `references/verifier-recipes.md` when the chosen workflow verifies;
+load `references/run-ledger.md` at the ledger step.
 
 ## Step 1 - Route
 
@@ -42,6 +43,8 @@ requested mode could not be realized.
 
 ## Step 3 - Verify / Early Stop
 
+When verifying, load `references/verifier-contract.md` and `references/verifier-recipes.md`.
+
 Early stop only when all are true:
 
 - low or medium risk;
@@ -58,6 +61,6 @@ user already opted into max quality this run (`--quality=max` or an explicit "us
 
 ## Step 4 - Ledger And Present
 
-Every run gets a ledger entry under `.fusion/runs/` using `<skill-root>/scripts/fusion_ledger.py`. Present the final
-answer first, then the audit trail: chosen workflow, realized panel state/mode, verifier result, run id,
-and why escalation did or did not happen.
+Load `references/run-ledger.md`. Every run gets a ledger entry under `.fusion/runs/` using
+`<skill-root>/scripts/fusion_ledger.py`. Present the final answer first, then the audit trail: chosen
+workflow, realized panel state/mode, verifier result, run id, and why escalation did or did not happen.

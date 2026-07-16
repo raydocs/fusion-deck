@@ -1,10 +1,10 @@
 # Export path threading — judged output as a file, passed by path
 
-Borrowed from RepoPrompt CE's `prompt-exports/` discipline (and its stray-export cleanup): a panel
-command's judged result should be persisted to a **real repo-local file**, and the next step should read it
-**by path** rather than receiving it re-summarized inline. Inline re-summarization is lossy, token-heavy,
-and drifts across hand-offs; a path on disk is a stable, inspectable seam — the same "two conversations
-kept separate" instinct as the scoped-subagent firewall (`subagent-prompt-template.md`).
+From RepoPrompt CE's path-not-inline export discipline: a panel command's judged result should be
+persisted to a **real repo-local file**, and the next step should read it **by path** rather than receiving
+it re-summarized inline. Inline re-summarization is lossy, token-heavy, and drifts across hand-offs; a path
+on disk is a stable, inspectable seam — the same "two conversations kept separate" instinct as the
+scoped-subagent firewall (`subagent-prompt-template.md`).
 
 This is **opt-in** via `--export`. Without it, `/fusion`, `/fusion-plan`, and `/fusion-review` behave
 exactly as before (answer in the chat). With it, they also write the deliverable to a file and return the

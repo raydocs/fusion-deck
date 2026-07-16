@@ -105,10 +105,10 @@ Input: \$ARGUMENTS
 EOF
   echo "  wrote /$cmd"
 }
-gen_wrapper fusion             "Fan a hard question to the premium model panel (Opus 4.8 + GPT-5.6 Sol + Gemini 3.1 Pro via agy), Opus judges and writes the answer." "<the hard question or task>"
+gen_wrapper fusion             "Fan a hard question to the premium model panel (judged synthesis), Opus judges and writes the answer." "<the hard question or task>"
 gen_wrapper fusion-auto        "Route a task through fusion-deck v2: choose workflow, verify, and escalate only when needed." "<task> [--quality=fast|balanced|max]"
 gen_wrapper fusion-ultra       "Run the max-quality v2 workflow: blind panel, contradiction matrix, targeted probes, verifier, final synthesis." "<hard task requiring maximum quality>"
-gen_wrapper fusion-review      "Audit code/a plan with the premium panel (Opus 4.8 + GPT-5.6 Sol + Gemini 3.1 Pro via agy), Opus-judged structured findings." "<diff, files, or design to review>"
+gen_wrapper fusion-review      "Audit code/a plan with the premium model panel (judged synthesis), Opus-judged structured findings." "<diff, files, or design to review>"
 gen_wrapper fusion-investigate "Investigate a bug/'why is it like this' evidence-first; the panel adjudicates competing hypotheses; ends at a root-cause report." "<the bug or question> [--panel]"
 gen_wrapper fusion-plan        "Turn a vague request into a verifiable Claude Code Workflow Contract (not a Codex /goal)." "<the vague request> [--panel] [--deep]"
 gen_wrapper fusion-context     "Build a RepoPrompt-style Context Pack (fixed order, density tiers, token budget)." "<task the pack is for> [paste|handoff|agent]"
@@ -120,7 +120,7 @@ gen_wrapper fusion-remind      "Re-anchor a drifting session: a one-screen cheat
 
 echo
 echo "-- panel availability on this machine --"
-bash "$src/scripts/detect_panel.sh" || true
+bash "$src/scripts/detect_panel.sh" --verbose || true
 echo
 echo "Done. Reload in Claude Code with /reload-skills (or restart). Then these slash commands work:"
 echo "      /fusion  /fusion-auto  /fusion-ultra  /fusion-review  /fusion-investigate  /fusion-plan"
