@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# run_codex.sh — run one GPT-5.5 panelist (via the codex CLI) on a prompt, with web search + bash.
+# run_codex.sh — run one GPT-5.6 Sol panelist (via the codex CLI) on a prompt, with web search + bash.
 #
 # Usage:
 #   run_codex.sh <prompt_file> <output_file> [reasoning_effort]
@@ -9,7 +9,7 @@
 # - reasoning_effort : low | medium | high   (default: medium)
 #
 # Model selection (audited design decision):
-#   We TRUST the codex CLI's configured default model, which is GPT-5.5 on a premium codex setup.
+#   We TRUST the codex CLI's configured default model, which is GPT-5.6 Sol on a premium codex setup.
 #   We do NOT hardcode a model slug, because codex slugs rotate and a stale pinned slug breaks more
 #   often than it helps. To pin or override, export FUSION_CODEX_MODEL=<slug>. The RESOLVED model is
 #   always echoed (MODEL=...) so a weak/wrong default is VISIBLE, never silently used.
@@ -39,7 +39,7 @@ output_file="${2:?usage: run_codex.sh <prompt_file> <output_file> [reasoning_eff
 effort="${3:-medium}"
 
 if ! command -v codex >/dev/null 2>&1; then
-  echo "[run_codex.sh] codex CLI not installed — cannot run the GPT-5.5 panelist." >&2
+  echo "[run_codex.sh] codex CLI not installed — cannot run the GPT-5.6 Sol panelist." >&2
   exit 127
 fi
 if [ ! -s "$prompt_file" ]; then

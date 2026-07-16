@@ -4,7 +4,7 @@
 # fusion-deck fans a prompt out to a panel of models in parallel, then Opus 4.8
 # judges. Opus 4.8 is ALWAYS a panelist (via the Agent/Task tool, in-process subagents) and is
 # ALWAYS the judge — it needs no CLI. This script only probes the EXTERNAL panelist CLIs
-# (GPT-5.5 via `codex`, Gemini 3.1 Pro via Antigravity CLI or explicit legacy `gemini`) and reports the
+# (GPT-5.6 Sol via `codex`, Gemini 3.1 Pro via Antigravity CLI or explicit legacy `gemini`) and reports the
 # richest panel the machine
 # can currently support.
 #
@@ -13,7 +13,7 @@
 #
 # Output: human-readable lines + two greppable lines the orchestrator keys on:
 #   PANEL_STATE=<PREMIUM|DEGRADED_OPUS_GPT5|DEGRADED_OPUS_GEMINI|OPUS_ONLY>
-#   SLUG=<opus4.8-gpt5.5-gemini3.1pro|opus4.8-gpt5.5|opus4.8-gemini3.1pro|opus4.8-4.8>
+#   SLUG=<opus4.8-gpt5.6sol-gemini3.1pro|opus4.8-gpt5.6sol|opus4.8-gemini3.1pro|opus4.8-4.8>
 
 set -uo pipefail
 
@@ -32,7 +32,7 @@ fusion_detect_gemini_backend && gemini_ok=true
 
 echo "panelist availability (Opus 4.8 is always a panelist + the judge, via Agent/Task subagents):"
 echo "  opus4.8       : yes (Agent subagents — always available)"
-printf "  gpt5.5        : %s (codex CLI)\n"  "$([ "$codex_ok"  = true ] && echo yes || echo NO)"
+printf "  gpt5.6sol        : %s (codex CLI)\n"  "$([ "$codex_ok"  = true ] && echo yes || echo NO)"
 if $gemini_ok; then
   printf "  gemini3.1pro  : yes (%s via %s)\n" "$FUSION_GEMINI_BACKEND_RESOLVED" "$FUSION_GEMINI_BACKEND_BINARY"
 else
@@ -40,16 +40,16 @@ else
 fi
 echo
 
-if   $codex_ok && $gemini_ok; then state="PREMIUM";              slug="opus4.8-gpt5.5-gemini3.1pro"
-elif $codex_ok;                then state="DEGRADED_OPUS_GPT5";   slug="opus4.8-gpt5.5"
+if   $codex_ok && $gemini_ok; then state="PREMIUM";              slug="opus4.8-gpt5.6sol-gemini3.1pro"
+elif $codex_ok;                then state="DEGRADED_OPUS_GPT5";   slug="opus4.8-gpt5.6sol"
 elif $gemini_ok;               then state="DEGRADED_OPUS_GEMINI"; slug="opus4.8-gemini3.1pro"
 else                                state="OPUS_ONLY";            slug="opus4.8-4.8"
 fi
 
 case "$state" in
-  PREMIUM) echo "panel: PREMIUM triple available (Opus 4.8 + GPT-5.5 + Gemini 3.1 Pro)." ;;
+  PREMIUM) echo "panel: PREMIUM triple available (Opus 4.8 + GPT-5.6 Sol + Gemini 3.1 Pro)." ;;
   *)       echo "panel: $state — NOT the premium triple. Install the missing CLI(s) to enable PREMIUM:"
-           $codex_ok  || echo "    - codex  (GPT-5.5):       https://developers.openai.com/codex"
+           $codex_ok  || echo "    - codex  (GPT-5.6 Sol):       https://developers.openai.com/codex"
            $gemini_ok || echo "    - agy    (Gemini 3.1 Pro): https://antigravity.google/docs/cli-install" ;;
 esac
 echo

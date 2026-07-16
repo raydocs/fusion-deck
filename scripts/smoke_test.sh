@@ -108,6 +108,22 @@ echo "$dp" | grep -q '^PANEL_STATE=' && ok "detect_panel prints PANEL_STATE" || 
 echo "$dp" | grep -q '^SLUG='        && ok "detect_panel prints SLUG"        || bad "detect_panel missing SLUG"
 echo "$dp" | grep -q '^GEMINI_BACKEND=' && ok "detect_panel prints GEMINI_BACKEND" || bad "detect_panel missing GEMINI_BACKEND"
 
+echo "-- PREMIUM slug consistency (version-agnostic) --"
+# Extract the PREMIUM slug from detect_panel.sh source (the slug="…" next to state="PREMIUM") and
+# assert that exact string appears verbatim in SKILL.md and references/panel-prompt.md. No version
+# is hardcoded here so the check survives future panelist renames.
+premium_slug="$(
+  grep 'state="PREMIUM"' "$root/scripts/detect_panel.sh" \
+    | sed -n 's/.*slug="\([^"]*\)".*/\1/p' | head -1
+)"
+if [ -n "$premium_slug" ] \
+  && grep -qF "$premium_slug" "$root/SKILL.md" \
+  && grep -qF "$premium_slug" "$root/references/panel-prompt.md"; then
+  ok "PREMIUM slug '$premium_slug' consistent in detect_panel / SKILL.md / panel-prompt.md"
+else
+  bad "PREMIUM slug missing or inconsistent across docs (got: '${premium_slug:-<empty>}')"
+fi
+
 echo "-- assert_triple_panel gate (simulated, no CLIs on PATH) --"
 # Hard-fail when premium unavailable and no override: must exit non-zero.
 if PATH=/nonexistent "$sh_bin" "$root/scripts/assert_triple_panel.sh" >/dev/null 2>&1; then

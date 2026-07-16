@@ -79,10 +79,10 @@ codex_ok=false; [ "$codex_rc" = 0 ] && codex_ok=true
 gemini_ok=false; [ "$gemini_rc" = 0 ] && gemini_ok=true
 
 cli_participants=""
-$codex_ok && cli_participants="gpt5.5"
+$codex_ok && cli_participants="gpt5.6sol"
 $gemini_ok && cli_participants="${cli_participants:+$cli_participants+}gemini3.1pro"
 absent=""
-$need_codex && ! $codex_ok && absent="$absent gpt5.5(rc=$codex_rc)"
+$need_codex && ! $codex_ok && absent="$absent gpt5.6sol(rc=$codex_rc)"
 $need_gemini && ! $gemini_ok && absent="$absent gemini3.1pro(rc=$gemini_rc)"
 
 realized_mode="$mode"

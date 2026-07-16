@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # assert_triple_panel.sh — HARD GATE for premium mode.
 #
-# In premium mode the panel MUST be the full triple: Opus 4.8 (always present) + GPT-5.5 (codex)
+# In premium mode the panel MUST be the full triple: Opus 4.8 (always present) + GPT-5.6 Sol (codex)
 # + Gemini 3.1 Pro (Antigravity CLI by default, legacy gemini only when explicit). This script enforces
 # that the codex CLI and a Gemini backend are present and exits
 # non-zero with an actionable remediation message if either is missing — so a caller can NEVER
@@ -13,7 +13,7 @@
 #
 # Exit codes:
 #   0   premium triple confirmed (codex AND gemini present)  — OR  degrade explicitly allowed
-#   10  codex (GPT-5.5) missing,  premium required (no override)
+#   10  codex (GPT-5.6 Sol) missing,  premium required (no override)
 #   11  gemini (Gemini 3.1 Pro) missing, premium required (no override)
 #   12  both codex and Gemini backend missing, premium required (no override)
 #   2   usage error
@@ -53,7 +53,7 @@ $gemini_ok || missing="${missing}gemini-backend "
 missing="${missing% }"
 
 if $codex_ok && $gemini_ok; then
-  echo "[assert_triple_panel] OK — premium triple available (Opus 4.8 + GPT-5.5 + Gemini 3.1 Pro)."
+  echo "[assert_triple_panel] OK — premium triple available (Opus 4.8 + GPT-5.6 Sol + Gemini 3.1 Pro)."
   echo "PANEL_STATE=PREMIUM"
   echo "GEMINI_BACKEND=$FUSION_GEMINI_BACKEND_RESOLVED"
   exit 0
@@ -83,7 +83,7 @@ fi
 {
   echo "[assert_triple_panel] PREMIUM panel required but missing: ${missing}"
   echo "  Premium fusion needs BOTH external CLIs:"
-  $codex_ok  || echo "    - codex  (GPT-5.5):        install from https://developers.openai.com/codex , then verify 'codex --version'"
+  $codex_ok  || echo "    - codex  (GPT-5.6 Sol):        install from https://developers.openai.com/codex , then verify 'codex --version'"
   $gemini_ok || echo "    - agy    (Gemini 3.1 Pro): install from https://antigravity.google/docs/cli-install , then verify 'agy --version'"
   $gemini_ok || echo "      Legacy gemini is opt-in only: FUSION_GEMINI_BACKEND=gemini or FUSION_ALLOW_LEGACY_GEMINI=1"
   echo "  To KNOWINGLY proceed with a smaller (degraded) panel, re-run with: FUSION_ALLOW_DEGRADED=1"

@@ -12,7 +12,7 @@ classify the deliverable**, then follow the matching track.
 When mixed ("design and implement X"), the implementation is the deliverable: Track A for the code, fold
 the reasoning in as brief rationale.
 
-Read every panelist response in full first, and **attribute by panelist** ("Opus run A", "GPT-5.5",
+Read every panelist response in full first, and **attribute by panelist** ("Opus run A", "GPT-5.6 Sol",
 "Gemini 3.1 Pro") so the user can trace any decision. A panelist that failed or was dropped is treated as
 **absent — never as silent agreement.**
 

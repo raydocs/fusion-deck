@@ -2,7 +2,7 @@
 name: fusion-deck
 description: >-
   Higher-confidence answers and careful execution for Claude Code. `/fusion` asks a panel of top models —
-  Opus 4.8 + GPT-5.5 (via the codex CLI) + Gemini 3.1 Pro (via Antigravity CLI `agy`, with legacy
+  Opus 4.8 + GPT-5.6 Sol (via the codex CLI) + Gemini 3.1 Pro (via Antigravity CLI `agy`, with legacy
   `gemini` as an explicit opt-in) — the same question in
   parallel, then Opus 4.8 judges all answers and writes one cross-checked answer; `/fusion-review` audits
   code or a plan the same way and returns one prioritized findings list. v2 adds `/fusion-auto` for
@@ -45,8 +45,8 @@ The PREMIUM panel is the full triple. Availability is reported by `scripts/detec
 
 | PANEL_STATE | Panel | Slug |
 | --- | --- | --- |
-| `PREMIUM` | Opus 4.8 + GPT-5.5 + Gemini 3.1 Pro (`agy` by default) | `opus4.8-gpt5.5-gemini3.1pro` |
-| `DEGRADED_OPUS_GPT5` | Opus 4.8 + GPT-5.5 | `opus4.8-gpt5.5` |
+| `PREMIUM` | Opus 4.8 + GPT-5.6 Sol + Gemini 3.1 Pro (`agy` by default) | `opus4.8-gpt5.6sol-gemini3.1pro` |
+| `DEGRADED_OPUS_GPT5` | Opus 4.8 + GPT-5.6 Sol | `opus4.8-gpt5.6sol` |
 | `DEGRADED_OPUS_GEMINI` | Opus 4.8 + Gemini 3.1 Pro | `opus4.8-gemini3.1pro` |
 | `OPUS_ONLY` | two cold Opus 4.8 runs | `opus4.8-4.8` |
 

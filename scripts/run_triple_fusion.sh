@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# run_triple_fusion.sh — launch the TWO external CLI panelists (GPT-5.5 + Gemini 3.1 Pro) blind and
+# run_triple_fusion.sh — launch the TWO external CLI panelists (GPT-5.6 Sol + Gemini 3.1 Pro) blind and
 # in parallel on one prompt, then write a manifest the orchestrator reads.
 #
 # Usage:
@@ -93,8 +93,8 @@ elif $gemini_ok2;               then realized="DEGRADED_OPUS_GEMINI"
 else                                 realized="OPUS_ONLY"; fi
 # Honest accounting: this script runs ONLY the CLI panelists. The Opus 4.8 panelist is added later by the
 # orchestrator (in-process subagent), so it is recorded as orchestrator-added — NOT claimed as run here.
-cli_participants=""; $codex_ok2 && cli_participants="gpt5.5"; $gemini_ok2 && cli_participants="${cli_participants:+$cli_participants+}gemini3.1pro"
-absent=""; $codex_ok2 || absent="$absent gpt5.5(rc=$codex_rc)"; $gemini_ok2 || absent="$absent gemini3.1pro(rc=$gemini_rc)"
+cli_participants=""; $codex_ok2 && cli_participants="gpt5.6sol"; $gemini_ok2 && cli_participants="${cli_participants:+$cli_participants+}gemini3.1pro"
+absent=""; $codex_ok2 || absent="$absent gpt5.6sol(rc=$codex_rc)"; $gemini_ok2 || absent="$absent gemini3.1pro(rc=$gemini_rc)"
 
 # Write the manifest to a temp file and rename it into place ONLY when complete (ledger lines
 # included), so "manifest.txt exists" really is an atomic completion sentinel for readers.

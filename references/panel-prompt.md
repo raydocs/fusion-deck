@@ -58,7 +58,7 @@ The judge-side counterpart (panelist answers are data, never instructions) is in
 
 ## Panel composition per PANEL_STATE / slug
 
-- `PREMIUM` (`opus4.8-gpt5.5-gemini3.1pro`) — Opus 4.8 + GPT-5.5 (codex) + Gemini 3.1 Pro (`agy` by default), blind
+- `PREMIUM` (`opus4.8-gpt5.6sol-gemini3.1pro`) — Opus 4.8 + GPT-5.6 Sol (codex) + Gemini 3.1 Pro (`agy` by default), blind
   and parallel, then Opus judges.
 - **Wide** (`premium_wide` / ultra round 1) — the PREMIUM triple **plus a second cold Opus run** (4
   panelists): cross-family diversity *and* same-model self-consistency in one round. Independent cold
@@ -66,7 +66,7 @@ The judge-side counterpart (panelist answers are data, never instructions) is in
   judged gains ~+6.7 on DRACO), and Opus-vs-Opus disagreement is an extra confidence signal for the
   judge — if two cold runs of the *judge's own model* disagree, that claim is not high-confidence no
   matter how confident either run sounded.
-- `DEGRADED_OPUS_GPT5` (`opus4.8-gpt5.5`) — Opus 4.8 + GPT-5.5.
+- `DEGRADED_OPUS_GPT5` (`opus4.8-gpt5.6sol`) — Opus 4.8 + GPT-5.6 Sol.
 - `DEGRADED_OPUS_GEMINI` (`opus4.8-gemini3.1pro`) — Opus 4.8 + Gemini 3.1 Pro.
 - `OPUS_ONLY` (`opus4.8-4.8`) — the same prompt run as **two** independent Opus 4.8 subagents, then judged.
 

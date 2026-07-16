@@ -1,9 +1,10 @@
 # Degraded mode — policy
 
-The PREMIUM panel is the full triple (Opus 4.8 + GPT-5.5 + Gemini 3.1 Pro). Gemini 3.1 Pro is provided
+The PREMIUM panel is the full triple (Opus 4.8 + GPT-5.6 Sol + Gemini 3.1 Pro). Gemini 3.1 Pro is provided
 by Antigravity CLI (`agy`) by default; legacy `gemini` is only used when explicitly enabled. When an
 external CLI/backend is missing the panel is **degraded** — and that must always be **explicit and
-disclosed**, never silently faked. This is the skill's cardinal rule.
+disclosed**, never silently faked. This is the skill's cardinal rule. Pin `FUSION_CODEX_MODEL` (e.g.
+`gpt-5.6-sol`) only if the local codex CLI default lags behind the documented premium panelist.
 
 ## Behavior (enforced by the scripts)
 
