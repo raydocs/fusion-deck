@@ -697,13 +697,19 @@ for b in bash sleep kill pkill pgrep date true false; do
 done
 # Ensure timeout/gtimeout are absent from the sandbox PATH even if linked by name collision.
 rm -f "$wd_tmp/timeout" "$wd_tmp/gtimeout"
+# The subshell's ok/bad counters are COPIES — export them via a file so a watchdog failure
+# actually fails the suite instead of vanishing with the subshell.
+wd_counts="$(mktemp "${TMPDIR:-/tmp}/pfo_wd_counts.XXXXXX")"
 (
   # Subshell isolation: source backend helpers under the stripped PATH.
   export PATH="$wd_tmp"
+  pass=0; fail=0
   # shellcheck disable=SC1091
   . "$root/scripts/gemini_backend.sh"
   # Slow command must be cut short (well under 10s) and return nonzero; no orphan sleep.
-  wd_self=$BASHPID
+  # BASHPID needs bash>=4 (macOS ships 3.2): degrade to $$ there — the orphan probe turns
+  # best-effort, the timing/rc assertions keep their teeth either way.
+  wd_self="${BASHPID:-$$}"
   SECONDS=0
   fusion_run_with_timeout 1 sleep 10
   wd_rc=$?
@@ -725,8 +731,55 @@ rm -f "$wd_tmp/timeout" "$wd_tmp/gtimeout"
   wd_rc=$?
   if [ "$wd_rc" -eq 0 ]; then ok "watchdog fallback preserves exit 0"
   else bad "watchdog fallback success passthrough failed (rc=$wd_rc, want 0)"; fi
+  printf '%s %s\n' "$pass" "$fail" > "$wd_counts"
 )
+read -r wd_pass wd_fail < "$wd_counts" 2>/dev/null || { wd_pass=0; wd_fail=1; }
+pass=$((pass + wd_pass)); fail=$((fail + wd_fail))
+rm -f "$wd_counts"
 rm -rf "$wd_tmp"
+
+echo "-- instruction-layer drift guards --"
+# 1. Orphan references: every references/*.md must be mentioned by commands/, SKILL.md, or another
+#    reference (transitively-loaded refs are legitimately wired). README mentions do NOT count —
+#    the runtime never loads README.
+for r in "$root"/references/*.md; do
+  b="$(basename "$r")"
+  if grep -rlF --include='*.md' "$b" "$root/commands" "$root/SKILL.md" "$root/references" 2>/dev/null \
+       | grep -qv "references/$b$"; then
+    ok "reference wired: $b"
+  else
+    bad "ORPHAN reference (never mentioned by commands/SKILL/other refs): $b"
+  fi
+done
+# 2. Invariant-count drift: fusion-remind's cheat-sheet list must mirror SKILL.md's core invariants.
+n_skill="$(awk '/^## Core invariants/{f=1; next} f && /^## /{exit} f' "$root/SKILL.md" | grep -cE '^[0-9]+\. ')"
+n_remind="$(awk '/^## Invariants/{f=1; next} f && /^## /{exit} f' "$root/commands/fusion-remind.md" | grep -cE '^[0-9]+\. ')"
+if [ "$n_skill" -gt 0 ] && [ "$n_skill" -eq "$n_remind" ]; then
+  ok "invariant count SKILL.md == fusion-remind.md ($n_skill)"
+else
+  bad "invariant drift: SKILL.md=$n_skill fusion-remind.md=$n_remind"
+fi
+# 3. Retired-model guard: the previous GPT panelist label must not creep back via copy-paste.
+#    (The pattern is spelled so this file's own source never matches itself.)
+if grep -rqiE "gpt-?5[.]5" "$root" --exclude-dir=.git --exclude-dir=.fusion --exclude-dir=__pycache__ 2>/dev/null; then
+  bad "retired GPT panelist label found — finish the rename: $(grep -rliE "gpt-?5[.]5" "$root" --exclude-dir=.git --exclude-dir=.fusion 2>/dev/null | head -3 | tr '\n' ' ')"
+else
+  ok "no retired GPT panelist labels remain"
+fi
+# 4. Path rule: command files must never invoke scripts by bare repo-relative path — always <skill-root>.
+if grep -qE '(bash|python3) scripts/' "$root"/commands/*.md 2>/dev/null; then
+  bad "bare 'scripts/' invocation in commands/ (must use <skill-root>/scripts/): $(grep -lE '(bash|python3) scripts/' "$root"/commands/*.md | head -3 | tr '\n' ' ')"
+else
+  ok "all command script invocations honor <skill-root>"
+fi
+# 5. Honest-degrade boilerplate presence (tokens, not exact wording) in the five panel commands.
+for c in fusion fusion-review fusion-ultra fusion-investigate fusion-optimize; do
+  if grep -q 'PANEL_STATE' "$root/commands/$c.md" && grep -q 'FUSION_ALLOW_DEGRADED' "$root/commands/$c.md"; then
+    ok "degrade disclosure tokens present: $c.md"
+  else
+    bad "degrade disclosure tokens missing in commands/$c.md"
+  fi
+done
 
 echo
 echo "== result: $pass passed, $fail failed =="
