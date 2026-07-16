@@ -804,8 +804,8 @@ for r in "$root"/references/*.md; do
 done
 if [ -z "$ref_over" ]; then ok "no single reference exceeds 2500 tokens"
 else bad "reference(s) over 2500 tokens: $ref_over"; fi
-# 4. Routing-table row parity: SKILL.md is the source of truth; the three synced copies
-#    (fusion-remind, README EN, README 中文) must keep the same row count.
+# 4. Routing-table row parity: SKILL.md is the source of truth; the synced copies
+#    (fusion-remind, README "What ships") must keep the same row count.
 count_rows() { # $1=file  $2=header-cell pattern
   awk -v pat="$2" '
     $0 ~ pat && /^\|/ {in_t=1; next}
@@ -816,12 +816,11 @@ count_rows() { # $1=file  $2=header-cell pattern
 }
 r_skill="$(count_rows "$root/SKILL.md" "The user is")"
 r_remind="$(count_rows "$root/commands/fusion-remind.md" "The situation")"
-r_readme_en="$(count_rows "$root/README.md" "When you.re trying to")"
-r_readme_zh="$(count_rows "$root/README.md" "你想干的")"
-if [ "$r_skill" -gt 0 ] && [ "$r_skill" = "$r_remind" ] && [ "$r_skill" = "$r_readme_en" ] && [ "$r_skill" = "$r_readme_zh" ]; then
-  ok "routing-table row parity across SKILL/remind/README-EN/README-中文 ($r_skill rows)"
+r_readme="$(count_rows "$root/README.md" "Situation")"
+if [ "$r_skill" -gt 0 ] && [ "$r_skill" = "$r_remind" ] && [ "$r_skill" = "$r_readme" ]; then
+  ok "routing-table row parity across SKILL/remind/README ($r_skill rows)"
 else
-  bad "routing-table drift: SKILL=$r_skill remind=$r_remind README-EN=$r_readme_en README-中文=$r_readme_zh"
+  bad "routing-table drift: SKILL=$r_skill remind=$r_remind README=$r_readme"
 fi
 
 echo
