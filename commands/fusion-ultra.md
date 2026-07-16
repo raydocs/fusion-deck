@@ -9,7 +9,7 @@ Use this when the user wants maximum quality or the task is high-risk, hard to r
 benefit from a second round. `/fusion-ultra` is not "three long answers plus a longer merge." It spends
 the second round only on the uncertainty that matters.
 
-Load `references/ultra-two-round.md`, `references/contradiction-matrix.md`,
+Load `references/contradiction-matrix.md`,
 `references/panel-prompt.md`, `references/judge-rubric.md`, and `references/verifier-contract.md`.
 
 ## Step 1 - Round 0 Context
@@ -32,13 +32,8 @@ bash <skill-root>/scripts/run_panel.sh --mode ultra_two_round "$out/prompt.md" "
 Hard-fail unless PREMIUM or `FUSION_ALLOW_DEGRADED=1`; on exit 13 STOP and disclose the realized `PANEL_STATE` from the manifest — never silently continue (`references/degraded-mode.md`).
 
 In the same turn, spawn **two cold Opus panelists** with the same prompt (the manifest's
-`OPUS_PANELISTS=2` confirms the count). Ask every panelist for:
-
-- answer / recommendation;
-- assumptions;
-- evidence used;
-- likely failure modes;
-- what would change my mind.
+`OPUS_PANELISTS=2` confirms the count). Ask every panelist for the answer/recommendation and use the
+standard five-line footer from `references/panel-prompt.md`.
 
 **Checkpoint before ending this turn: BOTH the backgrounded Bash call AND the Opus spawn must have gone out in this same message; if only one did, launch the other immediately and disclose in the audit trail that the panel was not fully concurrent.**
 
@@ -49,7 +44,8 @@ contradictions, blind spots, and targeted probes. Do not ask models to rewrite f
 
 ## Step 4 - Targeted Probes
 
-Assign only the unresolved, high-information probes:
+Assign only the unresolved, high-information probes. Load `references/probe-quality.md` at this step —
+each probe must pass the discriminating-oracle test before you spend a second round on it.
 
 - Codex: code trace, tests, patch feasibility, concrete implementation checks.
 - Gemini/Antigravity: long-context cross-check, missing constraints, alternate framing.

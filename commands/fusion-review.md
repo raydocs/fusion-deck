@@ -62,9 +62,11 @@ Bundle the signatures of those callers (codemap tier is enough — `bash <skill-
 depends on it. Frame the brief explicitly as a **code review of a change** (use the literal phrase "code
 review" and name the scope token) so panelists analyze the diff, not the file in the abstract.
 
-Give every panelist the **same review brief verbatim** (the packet + the independent-expert instruction
-from `panel-prompt.md`), asking each for findings as a list of `{severity, location (file:line),
-evidence, why it matters, suggested fix}`. Ask for correctness/security/edge-case bugs **and** reuse /
+Give every panelist the **same review brief verbatim** (the packet + the **no-web variant** independent-expert
+instruction from `panel-prompt.md`), asking each for findings as a list of `{severity, location (file:line),
+evidence, why it matters, suggested fix}`. Report at most 10 findings, ordered by severity; do not pad — a
+short list of real issues beats a long list of nitpicks. If you found nothing at a severity level, say so.
+Ask for correctness/security/edge-case bugs **and** reuse /
 simplification / efficiency cleanups. When the target is a change against a spec or plan, also ask each
 reviewer to judge **spec compliance on three axes — Missing (a requirement skipped), Extra (built more
 than asked: over-engineering, unrequested "nice to haves"), Misunderstood (right feature, wrong shape)** —

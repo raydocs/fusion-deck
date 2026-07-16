@@ -9,9 +9,7 @@ averaging answers.
   "contradictions": [
     {
       "claim": "",
-      "opus_position": "",
-      "gpt_position": "",
-      "gemini_position": "",
+      "positions": { "opus_a": "", "opus_b": "", "gpt": "", "gemini": "" },
       "severity": "blocking | non_blocking",
       "needs": "test | source | code trace | user decision"
     }
@@ -26,5 +24,11 @@ averaging answers.
   ]
 }
 ```
+
+`positions` is keyed per **realized** panelist from the manifest — include one key per realized panelist;
+an absent panelist gets **no key** (absence ≠ agreement). In wide/ultra rounds the two cold Opus runs get
+separate keys (`opus_a`, `opus_b`) — Opus-vs-Opus disagreement is a paid-for signal, never merge them.
+Each `targeted_probes` entry's `required_output` must name its discriminating oracle per
+`references/probe-quality.md`.
 
 Only blocking or uncertainty-reducing probes get a second round.

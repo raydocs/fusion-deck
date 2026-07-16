@@ -55,8 +55,7 @@ either input.**
 same model, the failure mode is deciding the answer first and then writing five sections that justify it.
 Write the five sections **complete, before drafting a single line of the final answer**, and derive the
 answer *from* them. If while writing the final answer you find yourself asserting something no section
-supports, go back and fix the analysis — never retrofit it. (This mirrors OpenRouter Fusion's pipeline,
-where the analysis judge is a separate temperature-0 stage that cannot see a draft answer.)
+supports, go back and fix the analysis — never retrofit it.
 
 Produce these five sections from the independent answers, then a grounded final answer:
 
@@ -64,8 +63,10 @@ Produce these five sections from the independent answers, then a grounded final 
   or two cold runs) is the highest-confidence signal; flag it and note how many converged.
 - **Contradictions** — direct disagreements on fact or recommendation. State the competing positions
   **verbatim-faithfully and attributed** (never smooth them into consensus; preserve minority-but-plausible
-  claims), and adjudicate where you can (who ran the code / read the primary source). If unresolved, say
-  what would settle it. Never bury a real conflict to look tidy.
+  claims), and adjudicate: first by evidence class (who ran code / read the primary source), then — if the
+  contradiction is cheaply checkable with a command, file read, or fetch — run that check yourself now and
+  record the observed output before writing the final answer. Only mark a contradiction 'unresolved' if no
+  cheap probe exists; then say what would settle it. Never bury a real conflict to look tidy.
 - **Partial coverage** — important sub-questions only some engaged.
 - **Unique insights** — non-obvious, valuable points raised by exactly one panelist; preserve them.
 - **Blind spots** — what the panel as a whole missed, including shared assumptions none questioned; add
@@ -78,10 +79,11 @@ Produce these five sections from the independent answers, then a grounded final 
 
 ## Principles (both tracks)
 
-- **Evidence over assertion:** a panelist that ran the code or read the primary source outranks one
-  reasoning from memory, regardless of model.
-- **Be honest about confidence and disagreement.** A result that hides a real conflict is worse than no
-  panel at all.
+- **Evidence over assertion:** verified run/read outranks memory, regardless of model.
+- **Honesty over tidy consensus:** surface real conflicts; don't hide them.
+- **Headcount is not adjudication.** Two panelists agreeing from memory lose to one panelist with verified
+  evidence — models share training-data errors, so convergence-from-memory is correlated, not independent.
+  When you side with a majority, say why beyond the count.
 - **Keep attribution** so any decision traces to its source.
 - **For artifacts, "verified to run" is done; "looks plausible" is not.** Fall back to seam-reasoning only
   when execution is genuinely impossible, and say so.

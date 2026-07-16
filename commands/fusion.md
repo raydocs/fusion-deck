@@ -24,8 +24,11 @@ Hard-fail unless PREMIUM or `FUSION_ALLOW_DEGRADED=1`; on exit 13 STOP and discl
 ## Step 1 — Fan out, blind and in parallel
 
 Build each panelist's prompt as the **user's task verbatim** plus the short independent-expert
-instruction from `panel-prompt.md`. Do **not** assign lenses/personas or pre-digest the task. Write the
-prompt to a file, then launch all panelists concurrently in one turn:
+instruction from `panel-prompt.md`. Do **not** assign lenses/personas or pre-digest the task. If the task
+depends on repo or local context, the CLI panelists cannot see it — build a minimal Context Pack (paste
+tier, `references/context-pack-format.md`) into `prompt.md` before fan-out; a bare path in the prompt is a
+broken panel: two panelists will answer from memory and their agreement is not evidence. Write the prompt
+to a file, then launch all panelists concurrently in one turn:
 
 Run the CLI panelists with your **Bash tool in background mode** (`run_in_background: true`) — the script
 waits on both CLIs internally, so background mode is what lets the call return immediately instead of

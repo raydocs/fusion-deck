@@ -18,13 +18,12 @@ the whole suite. Broaden only when the change crosses shared contracts.
 ```
 
 ## What makes a good probe
-- **Concrete and observable:** a command with a pass/fail outcome, or a file read whose content you
-  inspect — not "review the output" or "looks right."
-- **Targeted at the Done-when:** if Done-when says "all three endpoints," the probe checks all three. A
-  probe that would pass on partial work is the wrong probe.
-- **Cheap:** prefer a grep / a single test over a full build. Reserve broad checks for the Final line.
+
+A probe must pass the discriminating-oracle test in `references/probe-quality.md` (it must FAIL on the
+pre-change state); reject the non-probes listed there.
 
 ## On a failed probe
 Steer a correction: re-dispatch the item **once** with a tightened brief naming exactly what's missing.
 **Second failure → Escape Hatch:** STOP, mark the item `[blocked]`/`[incomplete]`, surface to the user.
-Record what you ran and what you observed — honestly, including failures and anything you couldn't verify.
+Record the exact command and the verbatim decisive line(s) of its output — never a paraphrase — including
+failures.

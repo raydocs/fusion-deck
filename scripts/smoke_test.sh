@@ -74,7 +74,7 @@ required=(
   references/reminder.md references/probe-quality.md references/export.md references/router-policy.md
   references/panel-modes.md references/run-ledger.md
   references/verifier-contract.md references/verifier-recipes.md references/contradiction-matrix.md
-  references/ultra-two-round.md docs/roadmap/v2-router.md tests/router_cases.yml
+  docs/roadmap/v2-router.md tests/router_cases.yml
   scripts/preflight.sh scripts/fusion_export.sh
   examples/workflow-contract.example.md examples/context-pack.example.md
   examples/fusion-review.example.md examples/subagent-task.example.md examples/handoff.example.md
