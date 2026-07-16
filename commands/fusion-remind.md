@@ -29,6 +29,7 @@ situation, also point to the one command that fits and why — one line, then st
 | make something measurably faster / smaller | `/fusion-optimize` | by exception |
 | clean up structure without changing behavior | `/fusion-refactor` | no |
 | pass work to the next agent / future-you | `/fusion-handoff` | no |
+| drifting in a long session / a fresh agent needs the map | `/fusion-remind` | no |
 
 For a quick factual question, just answer — don't route a trivial ask into a panel.
 

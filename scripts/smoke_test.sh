@@ -60,7 +60,7 @@ required=(
   commands/fusion-remind.md commands/fusion-auto.md commands/fusion-ultra.md
   scripts/assert_triple_panel.sh scripts/detect_panel.sh scripts/gemini_backend.sh
   scripts/run_codex.sh scripts/run_gemini.sh scripts/run_antigravity.sh
-  scripts/review_packet.sh
+  scripts/review_packet.sh scripts/load_stack_report.sh
   scripts/run_triple_fusion.sh scripts/smoke_test.sh scripts/lint_contract.py scripts/fusion_ledger.py
   scripts/route_task.py scripts/assert_panel.sh scripts/run_panel.sh scripts/detect_verifiers.sh
   scripts/run_verifier.sh scripts/codemap.sh scripts/selection_lint.py scripts/fusion_worktree.sh
@@ -780,6 +780,49 @@ for c in fusion fusion-review fusion-ultra fusion-investigate fusion-optimize; d
     bad "degrade disclosure tokens missing in commands/$c.md"
   fi
 done
+
+echo "-- efficiency guards (load-stack budgets) --"
+# 1. Per-command mandatory load stack must stay under budget. The cap has ~15% headroom over the
+#    heaviest stack at the time it was set (review ~5.2k) — raising it is a deliberate choice.
+if bash "$root/scripts/load_stack_report.sh" --assert-max 6000 >/dev/null 2>"$err_tmp"; then
+  ok "all command load stacks within 6000-token budget"
+else
+  bad "load stack over budget: $(tr '\n' ' ' < "$err_tmp")"
+fi
+# 2. SKILL.md frontmatter description is loaded into EVERY session — hard byte ceiling.
+desc_bytes="$(awk '/^---$/{n++; next} n==1 && /^description:/{f=1} f && n==1 {print} /^---$/ && n==2{exit}' "$root/SKILL.md" | wc -c | tr -d ' ')"
+if [ "$desc_bytes" -gt 0 ] && [ "$desc_bytes" -le 1000 ]; then
+  ok "SKILL.md frontmatter description ${desc_bytes}B <= 1000B ceiling"
+else
+  bad "SKILL.md frontmatter description ${desc_bytes}B exceeds 1000B ceiling (or missing)"
+fi
+# 3. No single always-loadable reference balloons past 2500 tokens.
+ref_over=""
+for r in "$root"/references/*.md; do
+  rb="$(wc -c < "$r" | tr -d ' ')"; rt=$(( (rb * 105 + 399) / 400 ))
+  [ "$rt" -gt 2500 ] && ref_over="${ref_over}$(basename "$r")(${rt}) "
+done
+if [ -z "$ref_over" ]; then ok "no single reference exceeds 2500 tokens"
+else bad "reference(s) over 2500 tokens: $ref_over"; fi
+# 4. Routing-table row parity: SKILL.md is the source of truth; the three synced copies
+#    (fusion-remind, README EN, README 中文) must keep the same row count.
+count_rows() { # $1=file  $2=header-cell pattern
+  awk -v pat="$2" '
+    $0 ~ pat && /^\|/ {in_t=1; next}
+    in_t && /^\|[ :-]*\|/ {next}          # separator row
+    in_t && /^\|/ {n++; next}
+    in_t {exit}
+    END {print n+0}' "$1"
+}
+r_skill="$(count_rows "$root/SKILL.md" "The user is")"
+r_remind="$(count_rows "$root/commands/fusion-remind.md" "The situation")"
+r_readme_en="$(count_rows "$root/README.md" "When you.re trying to")"
+r_readme_zh="$(count_rows "$root/README.md" "你想干的")"
+if [ "$r_skill" -gt 0 ] && [ "$r_skill" = "$r_remind" ] && [ "$r_skill" = "$r_readme_en" ] && [ "$r_skill" = "$r_readme_zh" ]; then
+  ok "routing-table row parity across SKILL/remind/README-EN/README-中文 ($r_skill rows)"
+else
+  bad "routing-table drift: SKILL=$r_skill remind=$r_remind README-EN=$r_readme_en README-中文=$r_readme_zh"
+fi
 
 echo
 echo "== result: $pass passed, $fail failed =="

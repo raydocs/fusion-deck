@@ -6,7 +6,8 @@ argument-hint: [contract path or task] [--panel to cross-check a thorny decompos
 # /fusion-orchestrate
 
 Coordinate scoped subagents — plan, decompose, dispatch, verify. Expanded semantics:
-`references/orchestration-rubric.md` (also load `subagent-prompt-template.md`, `verifier-prompt-template.md`).
+`references/orchestration-rubric.md` (also load `references/subagent-prompt-template.md` and
+`references/verifier-prompt-template.md`).
 
 > **CRITICAL — the orchestrator never implements.** All product-code edits inside Task subagents only.
 > Full tool/role rules: `orchestration-rubric.md` § "The orchestrator never implements".
