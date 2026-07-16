@@ -25,3 +25,14 @@ python3 scripts/fusion_ledger.py summarize --last 20
 
 The ledger is not a transcript dump. Store compact manifests and artifact paths; do not store secrets.
 Before sharing a ledger entry, apply `references/safety.md`.
+
+## Privacy
+
+`.fusion/runs/` is local and private project state. Do not commit it; the self-ignoring `.gitignore`
+is a seatbelt, not permission to put secrets there. Note the ledger copies full panel prompts, which
+for a review run include the diff/code under review.
+
+- Do not copy secrets into ledger artifacts.
+- Do not include private absolute paths in shared exports.
+- Redact or drop `.env*`, keys, credentials, tokens, passwords, and bearer strings.
+- Store enough evidence to improve routing, not raw chat history.

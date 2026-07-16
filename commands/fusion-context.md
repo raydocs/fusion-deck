@@ -41,6 +41,8 @@ Emit the **fixed pack** as exactly these five sections, in order: **file_map →
 meta_prompts → user_instructions** (this matches RepoPrompt CE's `defaultSectionOrder`). Per-file blocks
 use `File: <path>` then a fenced code block. You MAY *additionally* duplicate `user_instructions` as an
 optional preface at the very top (a primacy hedge) — it sits **above** the fixed five, not inside them.
+Mark codemap-tier paths in `file_map` with a trailing ` +` and include the legend line
+`(+ denotes code-map available)`; format details in `references/context-pack-format.md`.
 
 Pick a budget by who consumes the pack: **paste** ≈24–32k, **handoff** ≈60k, **agent** ≈120–160k tokens.
 Estimate tokens with the cheap heuristic `ceil(utf8_bytes / 4 * 1.05)` — run it with bash, no tokenizer:

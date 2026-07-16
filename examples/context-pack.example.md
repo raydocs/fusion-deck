@@ -11,10 +11,11 @@ Add a `GET /health` endpoint returning `200 {"status":"ok"}`. (Repeated at top a
 app/
   router.py          # routes registered here
   handlers/
-    orders.py        # handler pattern to mirror
+    orders.py +      # handler pattern to mirror (codemap below)
     health.py        # (to be created)
 tests/
   test_health.py     # (to be created)
+(+ denotes code-map available)
 ```
 
 ## file_contents

@@ -54,7 +54,8 @@ Assign only the unresolved, high-information probes:
 - Gemini/Antigravity: long-context cross-check, missing constraints, alternate framing.
 - Opus: synthesis, risk framing, final decision.
 
-Run deterministic verifiers when available.
+Run deterministic verifiers when available. Deterministic verifiers per ecosystem are catalogued in
+`references/verifier-recipes.md`.
 
 ## Step 5 - Final
 

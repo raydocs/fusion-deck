@@ -10,8 +10,8 @@ Use the v2 router instead of manually choosing a fusion command. This command do
 task, chooses a workflow, records a run ledger entry, verifies when possible, and escalates only when the
 workflow's policy says the cheaper path is not enough.
 
-Load `references/router-policy.md`, `references/panel-modes.md`, `references/run-ledger.md`, and
-`references/verifier-contract.md`.
+Load `references/router-policy.md`, `references/panel-modes.md`, `references/run-ledger.md`,
+`references/verifier-contract.md`, and `references/verifier-recipes.md`.
 
 ## Step 1 - Route
 

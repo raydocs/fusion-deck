@@ -86,6 +86,9 @@ an unfamiliar domain "resolve" means *go look*, not *make it up*.
 python3 <skill-root>/scripts/lint_contract.py docs/plans/<topic>-<DATE>.md
 ```
 
+If the lint reports findings, read `references/contract-lint-rules.md` for what each rule means before
+editing the contract.
+
 Fix every **error** (missing section, missing/empty work-item field, invalid status, `/goal` reference).
 Address **warnings** (unverifiable-looking finishing criteria) where reasonable. Re-run until it passes.
 

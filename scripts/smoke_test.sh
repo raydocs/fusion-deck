@@ -72,7 +72,7 @@ required=(
   references/investigation-rubric.md references/optimize-scoreboard.md references/codemap.md
   references/context-discovery.md references/refactor-recipe.md references/worktrees.md
   references/reminder.md references/probe-quality.md references/export.md references/router-policy.md
-  references/panel-modes.md references/run-ledger.md references/privacy-ledger.md
+  references/panel-modes.md references/run-ledger.md
   references/verifier-contract.md references/verifier-recipes.md references/contradiction-matrix.md
   references/ultra-two-round.md docs/roadmap/v2-router.md tests/router_cases.yml
   scripts/preflight.sh scripts/fusion_export.sh
