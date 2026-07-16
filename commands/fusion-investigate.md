@@ -38,7 +38,7 @@ two or more hypotheses genuinely survive the evidence**, run the `/fusion` panel
 (consensus / contradictions / which cause the evidence supports / blind spots). `--panel` is the operator's
 explicit cross-check: it forces a panel even when you'd otherwise skip — to adjudicate close survivors, or to
 stress-test a root cause you think is decisive. It cross-checks the conclusion; it never replaces the
-evidence-first discipline. Disclose the realized `PANEL_STATE`; a missing panelist is absent, never agreement.
+evidence-first discipline. Hard-fail unless PREMIUM or `FUSION_ALLOW_DEGRADED=1`; on exit 13 STOP and disclose the realized `PANEL_STATE` from the manifest — never silently continue (`references/degraded-mode.md`).
 
 ## Step 4 — Report
 

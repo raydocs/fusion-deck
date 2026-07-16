@@ -32,7 +32,7 @@ out of every pack while `!` keeps must-have docs in.
   **signatures only**, no bodies. Generate with `bash <skill-root>/scripts/codemap.sh <path>` — a 3-tier
   honest-degrade map (tree-sitter → ctags → grep) that discloses `CODEMAP_STATE=<TREESITTER|CTAGS|REGEX>`;
   the grep tier is the zero-dependency floor, ctags/tree-sitter are auto-detected upgrades (see
-  `references/codemap.md`).
+  `references/codemap.md`). If `codemap.sh` or `selection_lint.py` fails to RUN (script error, not lint findings), say so, do that pass manually against the reference, and label the pack's tier honestly.
 - **Tree-only** — path appears in `file_map` for structure, no content.
 
 ## Step 3 — Assemble in the FIXED order, under budget

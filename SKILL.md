@@ -91,6 +91,7 @@ When the user **describes a situation** instead of naming a command, map it to t
 orchestration commands cost quota and time, so name the command + why and let them say go. For a quick
 factual question, just answer directly — don't route a trivial ask into a panel.
 
+<!-- SOURCE OF TRUTH for routing. On change: sync README.md EN + 中文 tables and commands/fusion-remind.md. -->
 | The user is… | Offer |
 | --- | --- |
 | stuck on a hard call / trade-off, or wants one cross-checked | `/fusion` |

@@ -33,7 +33,7 @@ is routine; (2) dispatch a **fresh Task subagent** to land it and keep tests gre
 (same 3–5 samples); (4) append an attributed row to the scoreboard (change · metric · delta vs baseline ·
 kept/reverted); (5) at the **decision point**, run the `/fusion` panel procedure (read
 `<skill-root>/commands/fusion.md`) on "did this earn its keep, what next, are we done?" — the one place a
-panel is worth it in a loop. **Don't feed raw logs to the panel** — pass the scoreboard and the diff.
+panel is worth it in a loop. Hard-fail unless PREMIUM or `FUSION_ALLOW_DEGRADED=1`; on exit 13 STOP and disclose the realized `PANEL_STATE` from the manifest — never silently continue (`references/degraded-mode.md`). **Don't feed raw logs to the panel** — pass the scoreboard and the diff.
 
 Stop when the target is met, returns diminish, or the cap is hit. Revert any change that didn't beat noise.
 

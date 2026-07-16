@@ -123,8 +123,8 @@ echo "-- panel availability on this machine --"
 bash "$src/scripts/detect_panel.sh" || true
 echo
 echo "Done. Reload in Claude Code with /reload-skills (or restart). Then these slash commands work:"
-echo "      /fusion-auto  /fusion-ultra  /fusion-review  /fusion-investigate  /fusion-plan  /fusion-context"
-echo "      /fusion-orchestrate  /fusion-optimize  /fusion-refactor  /fusion-handoff  /fusion-remind"
-echo "      Plain fusion: use the existing /fusion skill, or invoke /fusion-deck."
+echo "      /fusion  /fusion-auto  /fusion-ultra  /fusion-review  /fusion-investigate  /fusion-plan"
+echo "      /fusion-context  /fusion-orchestrate  /fusion-optimize  /fusion-refactor  /fusion-handoff  /fusion-remind"
+echo "      Precedence: if a separate skill named fusion is installed it takes precedence for /fusion; the whole skill is also invocable as /fusion-deck."
 echo "      Offline self-check anytime:  bash \"$src/scripts/smoke_test.sh\""
 echo "      For the PREMIUM triple panel, install codex and Antigravity CLI (agy). Legacy gemini is opt-in."

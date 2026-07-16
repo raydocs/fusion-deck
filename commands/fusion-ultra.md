@@ -29,8 +29,7 @@ out=$(mktemp -d "${TMPDIR:-/tmp}/fusion-ultra.XXXXXX")   # fresh dir — never a
 bash <skill-root>/scripts/run_panel.sh --mode ultra_two_round "$out/prompt.md" "$out" high
 ```
 
-Exit 13 = a panelist failed at runtime without `FUSION_ALLOW_DEGRADED`: stop, disclose the realized
-state from `"$out"/manifest.txt`, and let the user choose retry vs. accept the degraded panel.
+Hard-fail unless PREMIUM or `FUSION_ALLOW_DEGRADED=1`; on exit 13 STOP and disclose the realized `PANEL_STATE` from the manifest — never silently continue (`references/degraded-mode.md`).
 
 In the same turn, spawn **two cold Opus panelists** with the same prompt (the manifest's
 `OPUS_PANELISTS=2` confirms the count). Ask every panelist for:
@@ -40,6 +39,8 @@ In the same turn, spawn **two cold Opus panelists** with the same prompt (the ma
 - evidence used;
 - likely failure modes;
 - what would change my mind.
+
+**Checkpoint before ending this turn: BOTH the backgrounded Bash call AND the Opus spawn must have gone out in this same message; if only one did, launch the other immediately and disclose in the audit trail that the panel was not fully concurrent.**
 
 ## Step 3 - Contradiction Matrix
 
@@ -61,3 +62,12 @@ Run deterministic verifiers when available. Deterministic verifiers per ecosyste
 
 Lead with the final deliverable. Then disclose: realized panel state/mode, contradiction matrix summary,
 targeted probes, verifier results, residual uncertainty, and run id.
+
+If `$ARGUMENTS` contains `--export`, also persist the final deliverable to a repo-local file and return
+the path so the next step can consume it by path (see `references/export.md`):
+
+```bash
+p=$(bash <skill-root>/scripts/fusion_export.sh path ultra "<the question>")  # -> .fusion/exports/…
+```
+
+Run the `safety.md` secret scan before writing. Present both the answer and the path.

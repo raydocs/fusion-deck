@@ -114,6 +114,7 @@ every step is **verified before the next**.
 Not sure which to reach for? Match your situation below — and when the task is easy, just ask Claude
 directly; the panel is for the calls where being wrong is expensive.
 
+<!-- SYNCED FROM SKILL.md routing table — edit there first. -->
 | When you're trying to… | Reach for | Panel? |
 | --- | --- | --- |
 | Settle a hard call or trade-off (*"optimistic or pessimistic locking?"*) | `/fusion` · `--wide` adds a 2nd cold Opus (4 panelists) | yes |
@@ -278,6 +279,7 @@ OpenRouter 在他们的 **DRACO** 深度研究基准（10 个领域、100 道题
 
 拿不准用哪个？对着下面找你的处境就行——简单活儿直接问 Claude，一桌模型是留给"答错了很贵"的场合的。
 
+<!-- SYNCED FROM SKILL.md routing table — edit there first. -->
 | 你想干的 | 用 | 开整桌？ |
 | --- | --- | --- |
 | 拍一个难决定 / 权衡（*"乐观锁还是悲观锁？"*） | `/fusion` · `--wide` 加一个冷跑 Opus（4 席） | 是 |

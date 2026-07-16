@@ -33,7 +33,7 @@ Write to a unique repo-local file `handoffs/<YYYY-MM-DD>-<HH-MM>-<type>-<slug>.m
   committed/pushed, run the ship-gate first** and record its result here:
   `bash <skill-root>/scripts/preflight.sh commit` (or `push <base>`) — whitespace + staged-index secret
   scan, honest-degrade to a regex floor without `gitleaks`. Note the realized `PREFLIGHT_SECRETSCAN`; a
-  `FAIL` is a known risk the next person must clear, not something to bury.
+  `FAIL` is a known risk the next person must clear, not something to bury. If the secret-scan helper can't run, disclose it and scan manually; never skip silently.
 - **Known Risks** — what's fragile, assumed, or unproven; anything that could bite the next person.
 - **Next Steps** — the concrete next actions, ordered; open questions **only if** they block or shape the
   next move.

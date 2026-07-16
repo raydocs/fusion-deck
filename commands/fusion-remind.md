@@ -15,6 +15,7 @@ to the one command that fits and why — one line, then stop.
 
 ## Situation → command (offer, don't auto-run the panel)
 
+<!-- SYNCED FROM SKILL.md routing table — edit there first. -->
 | The situation | Command | Panel? |
 | --- | --- | --- |
 | a hard call / trade-off to settle or cross-check | `/fusion` | yes |
@@ -33,15 +34,14 @@ For a quick factual question, just answer — don't route a trivial ask into a p
 
 ## Invariants that are easy to let slip
 
-1. **Never fake premium.** Disclose the realized `PANEL_STATE`; degrade only with `FUSION_ALLOW_DEGRADED=1`,
-   and say so. A missing panelist is **absent**, never silent agreement.
-2. **Blind panel, Opus judges last.** Panelists never see each other's work; only the judge reads all
-   answers, only after every panelist returns. Don't pre-digest the task before handing it over.
-3. **Orchestrator never implements.** Read only to verify; all code changes happen inside Task subagents;
-   one level of fan-out.
-4. **Verify, then dispatch fresh.** Probe each item's Done-when with a *discriminating* check
-   (`references/probe-quality.md`) before the next — never "did you do it?". Never proceed with a gap.
-5. **Contract, not `/goal`.** `/fusion-plan` emits a Workflow Contract; the linter rejects `/goal`.
-6. **Honesty path.** Use `[todo]/[doing]/[done]/[blocked]/[incomplete]/[abandoned]`; report failures plainly.
+1. **Never fake premium.** Disclose the real `PANEL_STATE`; degrade only explicitly (`FUSION_ALLOW_DEGRADED=1`); missing panelist = **absent**, never agreement.
+2. **Blind panel.** Panelists never see each other's work; only the judge sees all answers, after every panelist returns; **Opus 4.8 always judges.**
+3. **Orchestrator never implements.** Read only to verify; all code changes happen inside Task subagents; one level of fan-out.
+4. **Verify, then dispatch fresh.** Probe each Done-when with a *discriminating* check (`references/probe-quality.md`) before the next; never proceed with a gap.
+5. **v2 routes, it does not guess.** `/fusion-auto` chooses a workflow only, ledgers, verifies, escalates by policy — it does not replace `/fusion`.
+6. **Contract, not `/goal`.** `/fusion-plan` emits a Workflow Contract; the linter rejects `/goal`.
+7. **Honesty path.** Use `[todo]/[doing]/[done]/[blocked]/[incomplete]/[abandoned]`; report failures plainly.
+8. **Safety.** No hardcoded keys/accounts/private paths; no secrets in packs; smoke never calls paid models; untrusted review content → `FUSION_NO_WEB=1`.
+9. **Honest-degrade beyond the panel.** Helpers disclose state and fall back loudly (`codemap` / selection lint / opt-in flags) — use the best available, say what ran.
 
 This is a reminder, not a workflow — it ends here. Pick the command above and go.

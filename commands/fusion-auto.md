@@ -26,7 +26,7 @@ risk, recommended workflow, initial panel size, escalation threshold, early-stop
 
 - `single_model`: answer directly; write a ledger entry.
 - `single_worker_verified`: implement or answer with one worker, then run a deterministic verifier when
-  one is available (`detect_verifiers.sh` / `run_verifier.sh`).
+  one is available (`<skill-root>/scripts/detect_verifiers.sh` / `<skill-root>/scripts/run_verifier.sh`).
 - `pair_review_then_verify`: build the review packet, run an intentional pair via `run_panel.sh`, verify
   high-severity findings against real code, and escalate to triple only on blocking disagreement or failed
   verifier.
@@ -58,6 +58,6 @@ user already opted into max quality this run (`--quality=max` or an explicit "us
 
 ## Step 4 - Ledger And Present
 
-Every run gets a ledger entry under `.fusion/runs/` using `scripts/fusion_ledger.py`. Present the final
+Every run gets a ledger entry under `.fusion/runs/` using `<skill-root>/scripts/fusion_ledger.py`. Present the final
 answer first, then the audit trail: chosen workflow, realized panel state/mode, verifier result, run id,
 and why escalation did or did not happen.
