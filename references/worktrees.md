@@ -46,6 +46,11 @@ COPIED=3
 `<id>` must be a single safe segment (`[A-Za-z0-9._-]`, no slashes, no leading dot/dash). It names both
 the directory and the branch suffix, so keep it boring (`item-2`, not `../oops`).
 
+**Baseline before work.** Run the item's focused test command in the fresh worktree *before* the subagent
+starts. A failure found later is only attributable to the new work if the baseline was green — without it,
+pre-existing breakage and the subagent's bug are indistinguishable at review time. If the baseline fails,
+surface it; don't dispatch onto a broken base.
+
 ## The judge reviews every worktree diff before merge
 
 A worktree's branch is **not trusted until reviewed.** Before merging, the judge (Opus 4.8) reads each

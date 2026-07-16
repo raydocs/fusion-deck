@@ -21,6 +21,9 @@ Boundary: Do ONLY <X>. Stop when <X> is done. Do not refactor adjacent code.
 Do the work yourself — do NOT spawn your own subagents.
 If you hit a decision this brief doesn't resolve (an ambiguity, a trade-off, an unexpected conflict),
 STOP and report it back — do not pick an interpretation and build on it.
+Report a status: DONE / DONE_WITH_CONCERNS (finished, but you have doubts — name them) / BLOCKED (can't
+finish — say what's stuck) / NEEDS_CONTEXT (missing info — name it). Never silently ship work you're
+unsure of.
 When done, report: the files you changed and one line of evidence per Done-when.
 ```
 
@@ -33,6 +36,10 @@ exported to a file (`references/export.md`), **point the brief at that path** ("
 drift. If the contract has **Constraints / Boundaries** sections (`workflow-contract.md`), copy the
 relevant ones into the brief verbatim — the worker must inherit the negative space (what not to change,
 where not to write), not just the goal.
+
+**Set the model on the dispatch, not the default.** The brief's *content* orients the worker; the dispatch
+*envelope* picks its model — never leave it implicit, or it inherits the orchestrator's expensive one. Size
+it to the item (transcription-grade brief → cheapest tier; integration/judgment work → mid tier).
 
 **Don't include:** project conventions already in `CLAUDE.md`/`AGENTS.md` (agents read those themselves),
 step-by-step micro-instructions, code the agent can read itself, or any user↔orchestrator chatter.

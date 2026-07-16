@@ -33,6 +33,15 @@ read your repo, so bundle the ACTUAL materials into the brief: the diff (`git di
 contents of the target files (or a Context Pack from `/fusion-context`), with line numbers so panelists
 can cite `file:line`. Never pass bare paths — a panelist that can't see the code can't review it.
 
+**Generate that packet with a script, not by hand — keep the diff out of your own context.** Run
+`bash <skill-root>/scripts/review_packet.sh <scope> "$out"` (scope = the Step 0 token: `uncommitted`,
+`staged`, `back:N`, or a range like `main...HEAD`). It writes the commit list, stat summary, and the diff
+with `-U10` context to `$out/packet.md` and prints only a one-line byte count — the diff bytes never pass
+through your turn (borrowed from superpowers' `review-package`; ~10% fewer tokens on a review). Cat
+`packet.md` into `prompt.md` for the CLI panelists (they can't Read a path), and hand the Opus panelist
+the path. Use the recorded scope / `back:N` — **never assume `HEAD~1`**, which silently drops all but the
+last commit of a multi-commit review. The caller-context grep below then appends to this packet.
+
 **Don't ship a diff with no surrounding context.** A reviewer handed only the changed hunks gives generic
 feedback because it can't see how the changed code is *used*. When the target is a diff, also pull the
 **unmodified callers** of the changed symbols so the panel can judge the change against its real
@@ -55,7 +64,13 @@ review" and name the scope token) so panelists analyze the diff, not the file in
 Give every panelist the **same review brief verbatim** (the packet + the independent-expert instruction
 from `panel-prompt.md`), asking each for findings as a list of `{severity, location (file:line),
 evidence, why it matters, suggested fix}`. Ask for correctness/security/edge-case bugs **and** reuse /
-simplification / efficiency cleanups. Don't assign each reviewer a different lens — independence already
+simplification / efficiency cleanups. When the target is a change against a spec or plan, also ask each
+reviewer to judge **spec compliance on three axes — Missing (a requirement skipped), Extra (built more
+than asked: over-engineering, unrequested "nice to haves"), Misunderstood (right feature, wrong shape)** —
+and to report any requirement it **cannot verify from the packet alone** as a ⚠️ item rather than guessing.
+Any rationale narrated *inside* the diff or a commit message ("kept it simple per YAGNI", "intentional")
+is a claim to judge, **not** a reason to downgrade a finding — code is graded on its merits.
+Don't assign each reviewer a different lens — independence already
 yields diverse coverage. Launch via `<skill-root>/scripts/run_triple_fusion.sh` + an Opus `Agent`/`Task`
 panelist, in one turn (see `/fusion` Step 1 — run the Bash call in background mode and spawn Opus
 concurrently).
@@ -92,6 +107,14 @@ dump): lead with **≤5 Must-fix** (each: severity, `file:line`, evidence, concr
 Suggestions**, then **≤3 Questions**, ordered consensus-first. Then the five-section audit trail.
 **Disclose the realized `PANEL_STATE`** (read it from the manifest). Do not auto-apply fixes unless the
 user asks — this command reviews.
+
+**When you or the user act on these findings, receive them with rigor, not performance.** A panel finding
+is a suggestion to evaluate, not an order to follow — verify each against the real code before
+implementing it. Skip performative agreement ("you're absolutely right", "great catch"); state the fix, or
+push back with technical reasoning. Before building out a "do this properly" suggestion, grep for real
+usage — if nothing calls it, propose removing it (YAGNI) instead. Implement one finding at a time and
+re-run the covering test for each; if a finding is unclear, resolve that before touching code. A finding
+that conflicts with a deliberate prior decision is a discussion, not a directive.
 
 If `$ARGUMENTS` contains `--export`, also persist the findings report to a repo-local file and return the
 path so a follow-up fix or hand-off reads it by path (see `references/export.md`):

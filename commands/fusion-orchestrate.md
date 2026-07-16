@@ -34,7 +34,11 @@ Write/confirm the plan as a real file (the Workflow Contract; default `docs/plan
 Decompose to **natural granularity — 2–3 work items, cap 5**; if reaching for more, combine or raise the
 abstraction level. Each item carries `Goal / Done-when / Key files / Dependencies / Size / Status`, and a
 **Verifier Plan** entry (the concrete probe). **Gate A:** before dispatching anything, verify the plan and
-context are sound (`python3 <skill-root>/scripts/lint_contract.py <plan>` if it's a contract). The plan is
+context are sound (`python3 <skill-root>/scripts/lint_contract.py <plan>` if it's a contract). The lint is
+*structural* — also scan once for **semantic** conflicts it can't see: two items that contradict each other
+or a Constraint, a placeholder Done-when ("add validation" / "handle edge cases"), a Done-when that isn't
+discriminating, or an interface a later item needs that no earlier item produces. Surface them to the user
+in one batched question **before** dispatching — not one interrupt per discovery mid-run. The plan is
 **read-only to subagents**; you own it as a **living checklist**.
 
 `--panel`: if `$ARGUMENTS` contains the literal `--panel` flag — or for a genuinely thorny,
@@ -64,6 +68,12 @@ file paths, and **discoveries the agent couldn't find itself**; it scopes explic
 **excludes** CLAUDE.md conventions, step-by-step instructions, readable code, and any user↔orchestrator
 chatter (two-conversations firewall). **One level of fan-out:** the brief tells the subagent **not to
 spawn its own subagents** — it does the work itself.
+
+**Specify the subagent's model explicitly on every dispatch.** An omitted model silently inherits *your*
+model — often the most capable and most expensive — which quietly defeats delegation. Size it to the item:
+a transcription-grade brief that already carries the exact change → the cheapest tier; a multi-file or
+judgment-bearing item → a mid tier; keep the hardest reasoning on your own panel, not a worker. **Turn
+count beats token price** — a too-cheap model that loops three times costs more than the right one once.
 
 **Before** dispatching item N, mark it `[doing]` in the plan. (Status transitions are explicit gates.)
 

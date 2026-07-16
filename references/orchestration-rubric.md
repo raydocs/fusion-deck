@@ -12,6 +12,13 @@ How `/fusion-orchestrate` coordinates scoped subagents. The load-bearing idea is
 
 Keep your own context lean — read files only to verify, not to build a full mental model you'll never use.
 
+**Move bulk as files, not pasted text.** Anything you paste into a brief — and anything a worker prints
+back — stays resident in your context and is re-read every later turn. Hand a long export, a large diff,
+or a worker's detailed report over **as a file path**, and have the worker write its detail to a file and
+return only status + one line of evidence per Done-when + the path. A real session once sent a 42k-char
+brief that was 99% pasted history: a brief is its task, its file paths, and the discoveries it needs —
+never the session's accumulated history.
+
 ## Judgment never delegates (the mirror rule)
 
 The role split cuts both ways: the orchestrator never implements, and **subagents never make judgment
@@ -81,6 +88,8 @@ didn't create.
 ## Status transitions are explicit gates
 Mark `[doing]` in the plan **before** dispatching an item; mark `[done]` **only after** its probe passes.
 The plan is the durable state — keep it current so a fresh agent (or a post-compaction you) sees reality.
+After compaction or any gap, trust the plan file and `git log` over your own recollection — re-dispatching
+an already-`[done]` item is the single most expensive failure mode observed in long orchestrations.
 
 ## Rollup
 Per-item outcome (`[done]`/`[blocked]`/`[incomplete]` with detail, reusing the contract's status

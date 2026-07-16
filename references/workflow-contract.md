@@ -36,6 +36,12 @@ Decompose to **natural granularity — 2–3 items, cap 5.** If you reach for mo
 abstraction level. `Dependencies` + `Size` are what drive the sequential / parallel / steer choice in
 `/fusion-orchestrate`.
 
+For an item whose output later items build on, add an optional **Interfaces** line — the exact
+names/signatures it *produces* (function names, params, return types) and *consumes* from a prior item. A
+worker sees only its own item; this line is how item 3 learns the name item 1 actually used, so it doesn't
+call `clearLayers()` where item 1 wrote `clearFullLayers()`. **Not linted** — add it only where a real
+cross-item contract exists.
+
 ### Escape Hatch
 The pause conditions — the honesty path for impossible/contradictory/scope-changing situations:
 - validation contradicts the goal;
