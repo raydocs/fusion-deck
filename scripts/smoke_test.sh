@@ -60,6 +60,7 @@ required=(
   commands/fusion-remind.md commands/fusion-auto.md commands/fusion-ultra.md
   scripts/assert_triple_panel.sh scripts/detect_panel.sh scripts/gemini_backend.sh
   scripts/run_codex.sh scripts/run_gemini.sh scripts/run_antigravity.sh
+  scripts/review_packet.sh
   scripts/run_triple_fusion.sh scripts/smoke_test.sh scripts/lint_contract.py scripts/fusion_ledger.py
   scripts/route_task.py scripts/assert_panel.sh scripts/run_panel.sh scripts/detect_verifiers.sh
   scripts/run_verifier.sh scripts/codemap.sh scripts/selection_lint.py scripts/fusion_worktree.sh
@@ -118,7 +119,7 @@ if [ "$deg_rc" -eq 0 ] && echo "$deg" | grep -q '^DEGRADED=1'; then ok "assert a
 else bad "assert degrade-override broken (rc=$deg_rc)"; fi
 
 echo "-- Gemini backend selection (simulated CLIs) --"
-gb_tmp="$(mktemp -d /tmp/pfo_gb.XXXXXX)"
+gb_tmp="$(mktemp -d "${TMPDIR:-/tmp}/pfo_gb.XXXXXX")"
 cat > "$gb_tmp/codex" <<'EOF'
 #!/usr/bin/env bash
 if [ "${1:-}" = "--version" ]; then echo "codex fake"; exit 0; fi
@@ -157,7 +158,7 @@ if echo "$gb_agy" | grep -q '^PANEL_STATE=PREMIUM' && \
    echo "$gb_agy" | grep -q '^GEMINI_BACKEND=antigravity'; then
   ok "backend auto prefers Antigravity agy"
 else bad "backend auto should prefer agy"; fi
-gb_prompt="$(mktemp /tmp/pfo_agy_prompt.XXXXXX)"; gb_out="$(mktemp /tmp/pfo_agy_out.XXXXXX)"
+gb_prompt="$(mktemp "${TMPDIR:-/tmp}/pfo_agy_prompt.XXXXXX")"; gb_out="$(mktemp "${TMPDIR:-/tmp}/pfo_agy_out.XXXXXX")"
 printf 'hello backend\n' > "$gb_prompt"; : > "$gb_out"
 # FUSION_MIN_OUTPUT_BYTES=0: the fake agy's answer is a few bytes, which the plausibility floor would
 # (correctly) reject in a real run — this check only exercises backend delegation.
@@ -181,7 +182,7 @@ FUSION_PANEL_CHILD=1 "$sh_bin" "$root/scripts/assert_panel.sh" --mode single_opu
 [ $? -eq 14 ] && ok "assert_panel.sh blocks recursive invocation (exit 14)" || bad "assert_panel.sh should exit 14 under FUSION_PANEL_CHILD=1"
 FUSION_PANEL_CHILD=1 "$sh_bin" "$root/scripts/assert_triple_panel.sh" >/dev/null 2>&1
 [ $? -eq 14 ] && ok "assert_triple_panel.sh blocks recursive invocation (exit 14)" || bad "assert_triple_panel.sh should exit 14 under FUSION_PANEL_CHILD=1"
-rec_d="$(mktemp -d /tmp/pfo_rec.XXXXXX)"; printf 'x\n' > "$rec_d/p.md"; printf 'keep\n' > "$rec_d/manifest.txt"
+rec_d="$(mktemp -d "${TMPDIR:-/tmp}/pfo_rec.XXXXXX")"; printf 'x\n' > "$rec_d/p.md"; printf 'keep\n' > "$rec_d/manifest.txt"
 FUSION_PANEL_CHILD=1 "$sh_bin" "$root/scripts/run_panel.sh" --mode single_opus "$rec_d/p.md" "$rec_d" >/dev/null 2>&1
 rec_rc=$?
 if [ "$rec_rc" -eq 14 ] && [ -s "$rec_d/manifest.txt" ]; then
@@ -191,7 +192,7 @@ rm -rf "$rec_d"
 if PATH=/nonexistent "$sh_bin" "$root/scripts/assert_panel.sh" --mode opus_gpt_pair >/dev/null 2>&1; then
   bad "assert_panel.sh opus_gpt_pair should fail without codex"
 else ok "assert_panel.sh fails missing intentional pair dependency"; fi
-ap_tmp="$(mktemp -d /tmp/pfo_ap.XXXXXX)"
+ap_tmp="$(mktemp -d "${TMPDIR:-/tmp}/pfo_ap.XXXXXX")"
 cat > "$ap_tmp/codex" <<'EOF'
 #!/usr/bin/env bash
 if [ "${1:-}" = "--version" ]; then echo "codex fake"; exit 0; fi
@@ -207,14 +208,14 @@ if PATH="$ap_tmp:/usr/bin:/bin" "$sh_bin" "$root/scripts/assert_panel.sh" --mode
   ok "assert_panel.sh accepts premium_triple with fake codex+agy"
 else bad "assert_panel.sh should accept premium_triple with fake codex+agy"; fi
 rm -rf "$ap_tmp"
-ledger_tmp="$(mktemp -d /tmp/pfo_ledger.XXXXXX)"
+ledger_tmp="$(mktemp -d "${TMPDIR:-/tmp}/pfo_ledger.XXXXXX")"
 if python3 "$root/scripts/fusion_ledger.py" --out-root "$ledger_tmp" new --command smoke --workflow single_model --task "hello" >/dev/null 2>&1 && \
    python3 "$root/scripts/fusion_ledger.py" --out-root "$ledger_tmp" show latest >/dev/null 2>&1 && \
    python3 "$root/scripts/fusion_ledger.py" --out-root "$ledger_tmp" summarize --last 1 | grep -q '^RUNS=1'; then
   ok "fusion_ledger.py creates/shows/summarizes runs"
 else bad "fusion_ledger.py basic lifecycle failed"; fi
 rm -rf "$ledger_tmp"
-vf_tmp="$(mktemp -d /tmp/pfo_vf.XXXXXX)"
+vf_tmp="$(mktemp -d "${TMPDIR:-/tmp}/pfo_vf.XXXXXX")"
 printf 'test:\n\t@echo ok\n' > "$vf_tmp/Makefile"
 vf_detect="$(cd "$vf_tmp" && "$sh_bin" "$root/scripts/detect_verifiers.sh" 2>/dev/null)"
 echo "$vf_detect" | grep -q '^VERIFIER_STATE=FOUND' && ok "detect_verifiers.sh finds Makefile test" || bad "detect_verifiers.sh should find Makefile test"
@@ -227,7 +228,7 @@ echo "-- lint_contract behavior --"
 if python3 "$root/scripts/lint_contract.py" "$root/examples/workflow-contract.example.md" >/dev/null 2>&1; then
   ok "lint PASSES the good example contract"
 else bad "lint should pass examples/workflow-contract.example.md"; fi
-bad_fixture="$(mktemp /tmp/pfo_bad_contract.XXXXXX.md)"
+bad_fixture="$(mktemp "${TMPDIR:-/tmp}/pfo_bad_contract.XXXXXX.md")"
 printf '# Not a contract\n\nJust prose, no required sections, and it mentions /goal mode.\n' > "$bad_fixture"
 if python3 "$root/scripts/lint_contract.py" "$bad_fixture" >/dev/null 2>&1; then
   bad "lint should REJECT a contract missing required sections / using /goal"
@@ -235,7 +236,7 @@ else ok "lint REJECTS a malformed contract (missing sections + /goal)"; fi
 rm -f "$bad_fixture"
 # C009 — an otherwise-valid contract with a dangerous vague phrase must be rejected (and the clean
 # example must still pass, i.e. no false-positive — covered by the example-passes check above).
-c009_fixture="$(mktemp /tmp/pfo_c009.XXXXXX.md)"
+c009_fixture="$(mktemp "${TMPDIR:-/tmp}/pfo_c009.XXXXXX.md")"
 cat "$root/examples/workflow-contract.example.md" > "$c009_fixture"
 printf '\n- Note: just keep trying until it looks good.\n' >> "$c009_fixture"
 if python3 "$root/scripts/lint_contract.py" "$c009_fixture" >/dev/null 2>&1; then
@@ -243,7 +244,7 @@ if python3 "$root/scripts/lint_contract.py" "$c009_fixture" >/dev/null 2>&1; the
 else ok "lint REJECTS dangerous vague language (C009)"; fi
 rm -f "$c009_fixture"
 # C009 negation guard — a PROHIBITION ("do not edit anything outside app/") must NOT trip C009.
-c009_neg="$(mktemp /tmp/pfo_c009neg.XXXXXX.md)"
+c009_neg="$(mktemp "${TMPDIR:-/tmp}/pfo_c009neg.XXXXXX.md")"
 cat "$root/examples/workflow-contract.example.md" > "$c009_neg"
 printf '\n- Boundary: do not edit anything outside `app/`; never change whatever is in vendor/.\n' >> "$c009_neg"
 if python3 "$root/scripts/lint_contract.py" "$c009_neg" >/dev/null 2>&1; then
@@ -257,7 +258,7 @@ echo "$cm" | grep -q '^CODEMAP_STATE='      && ok "codemap.sh prints CODEMAP_STA
 echo "$cm" | grep -q '^CODEMAP_STATE=REGEX' && ok "codemap.sh honors FUSION_CODEMAP_TIER=regex" || bad "codemap.sh regex-tier override broken"
 # A bare `tree-sitter` CLI must NOT upgrade the tier (only python grammars actually parse) — regression for
 # the honest-degrade over-claim where a present-but-unused CLI faked CODEMAP_STATE=TREESITTER.
-cm_ts_dir="$(mktemp -d /tmp/pfo_cmts.XXXXXX)"
+cm_ts_dir="$(mktemp -d "${TMPDIR:-/tmp}/pfo_cmts.XXXXXX")"
 printf '#!/usr/bin/env bash\necho "tree-sitter 0.0-fake"\n' > "$cm_ts_dir/tree-sitter"; chmod +x "$cm_ts_dir/tree-sitter"
 cm_base="$(bash "$root/scripts/codemap.sh" "$root/scripts/lint_contract.py" 2>/dev/null | grep '^CODEMAP_STATE=')"
 cm_fake="$(PATH="$cm_ts_dir:$PATH" bash "$root/scripts/codemap.sh" "$root/scripts/lint_contract.py" 2>/dev/null | grep '^CODEMAP_STATE=')"
@@ -269,7 +270,7 @@ echo "-- selection_lint behavior --"
 if python3 "$root/scripts/selection_lint.py" "$root/examples/selection.example.json" >/dev/null 2>&1; then
   ok "selection_lint PASSES the good example manifest"
 else bad "selection_lint should pass examples/selection.example.json"; fi
-bad_sel="$(mktemp /tmp/pfo_bad_sel.XXXXXX.json)"
+bad_sel="$(mktemp "${TMPDIR:-/tmp}/pfo_bad_sel.XXXXXX.json")"
 printf '{"task":"x","budget_tokens":1000,"selected":[{"path":"a.py","mode":"full","reason":"r"}]}\n' > "$bad_sel"
 if python3 "$root/scripts/selection_lint.py" "$bad_sel" >/dev/null 2>&1; then
   bad "selection_lint should REJECT a selected file with no evidence (S007)"
@@ -277,7 +278,7 @@ else ok "selection_lint REJECTS a no-evidence manifest (S007 gate)"; fi
 rm -f "$bad_sel"
 
 echo "-- worktree NO_GIT guard --"
-wt_tmp="$(mktemp -d /tmp/pfo_wt.XXXXXX)"
+wt_tmp="$(mktemp -d "${TMPDIR:-/tmp}/pfo_wt.XXXXXX")"
 if ( cd "$wt_tmp" && bash "$root/scripts/fusion_worktree.sh" list >/dev/null 2>&1 ); then
   bad "fusion_worktree.sh list should fail (non-zero) outside a git repo"
 else
@@ -295,7 +296,7 @@ if PATH=/usr/bin:/bin command -v codex >/dev/null 2>&1 || \
    PATH=/usr/bin:/bin command -v agy >/dev/null 2>&1; then
   echo "  note  SKIP stale-clear check (a panel CLI resolves under /usr/bin:/bin; can't hide it safely)"
 else
-  rtf_d="$(mktemp -d /tmp/pfo_rtf.XXXXXX)"; rtf_p="$(mktemp /tmp/pfo_rtf_p.XXXXXX)"; printf 'hi\n' > "$rtf_p"
+  rtf_d="$(mktemp -d "${TMPDIR:-/tmp}/pfo_rtf.XXXXXX")"; rtf_p="$(mktemp "${TMPDIR:-/tmp}/pfo_rtf_p.XXXXXX")"; printf 'hi\n' > "$rtf_p"
   printf 'stale\n' > "$rtf_d/manifest.txt"; printf 'stale\n' > "$rtf_d/gemini_out.md"
   PATH=/usr/bin:/bin "$sh_bin" "$root/scripts/run_triple_fusion.sh" "$rtf_p" "$rtf_d" >/dev/null 2>&1
   if [ ! -e "$rtf_d/manifest.txt" ] && [ ! -e "$rtf_d/gemini_out.md" ]; then ok "run_triple_fusion clears stale outputs before running"
@@ -311,7 +312,7 @@ if PATH=/usr/bin:/bin command -v codex >/dev/null 2>&1 || \
    PATH=/usr/bin:/bin command -v agy >/dev/null 2>&1; then
   echo "  note  SKIP run_panel end-to-end (a panel CLI resolves under /usr/bin:/bin; can't hide it safely)"
 else
-  rp_tmp="$(mktemp -d /tmp/pfo_rp.XXXXXX)"
+  rp_tmp="$(mktemp -d "${TMPDIR:-/tmp}/pfo_rp.XXXXXX")"
   # Healthy fake codex: honors --version, finds -o <file>, writes a plausible-size answer.
   cat > "$rp_tmp/codex" <<'EOF'
 #!/usr/bin/env bash
@@ -387,7 +388,7 @@ EOF
 fi
 
 echo "-- selection_lint .fusionignore gate (S012) --"
-fi_tmp="$(mktemp -d /tmp/pfo_fi.XXXXXX)"
+fi_tmp="$(mktemp -d "${TMPDIR:-/tmp}/pfo_fi.XXXXXX")"
 mkdir -p "$fi_tmp/.git" "$fi_tmp/.fusion" "$fi_tmp/build" "$fi_tmp/docs"
 printf 'build\n!build/keep.js\n' > "$fi_tmp/.fusionignore"
 printf 'x\n' > "$fi_tmp/build/x.js"; printf 'k\n' > "$fi_tmp/build/keep.js"
@@ -414,7 +415,7 @@ else bad "fusion_export cleanup failed"; fi
 
 echo "-- preflight ship-gate --"
 # Outside a git repo: must fail with PREFLIGHT_STATE=FAIL and a usage-class exit (2).
-pf_tmp="$(mktemp -d /tmp/pfo_pf.XXXXXX)"
+pf_tmp="$(mktemp -d "${TMPDIR:-/tmp}/pfo_pf.XXXXXX")"
 pf_out="$(cd "$pf_tmp" && bash "$root/scripts/preflight.sh" commit 2>/dev/null)"; pf_rc=$?
 if [ "$pf_rc" -eq 2 ] && echo "$pf_out" | grep -q '^PREFLIGHT_STATE=FAIL'; then
   ok "preflight reports FAIL (exit 2) outside a git repo"
@@ -436,6 +437,191 @@ if ( cd "$pf_tmp" && git init -q && git config user.email t@t && git config user
   else ok "preflight redacts the secret value (no leak)"; fi
 else echo "  note  SKIP preflight in-repo check (git init unavailable)"; fi
 rm -rf "$pf_tmp"
+
+echo "-- review_packet offline checks --"
+# Temp repo + ok/bad helpers, same isolation style as preflight. Do NOT test bare-branch-name
+# scopes here — that behavior is intentionally deferred to a later batch.
+rpkt_tmp="$(mktemp -d "${TMPDIR:-/tmp}/pfo_rpkt.XXXXXX")"
+# Outside a git repo → nonzero (exit 2).
+( cd "$rpkt_tmp" && bash "$root/scripts/review_packet.sh" uncommitted "$rpkt_tmp/out" >/dev/null 2>&1 )
+rpkt_rc=$?
+if [ "$rpkt_rc" -ne 0 ]; then ok "review_packet fails outside a git repo (rc=$rpkt_rc)"
+else bad "review_packet should fail outside a git repo"; fi
+if ( cd "$rpkt_tmp" && git init -q && git config user.email t@t && git config user.name t ) 2>/dev/null; then
+  # Clean repo, empty uncommitted diff → exit 3.
+  ( cd "$rpkt_tmp" && printf 'base\n' > f.txt && git add f.txt && git commit -q -m c0 )
+  ( cd "$rpkt_tmp" && bash "$root/scripts/review_packet.sh" uncommitted "$rpkt_tmp/out_empty" >/dev/null 2>&1 )
+  rpkt_rc=$?
+  if [ "$rpkt_rc" -eq 3 ]; then ok "review_packet empty uncommitted diff -> exit 3"
+  else bad "review_packet empty uncommitted should exit 3 (rc=$rpkt_rc)"; fi
+  # uncommitted happy path: dirty working tree → exit 0, packet.md contains the change.
+  ( cd "$rpkt_tmp" && printf 'UNCOMMITTED-MARKER-42\n' >> f.txt )
+  ( cd "$rpkt_tmp" && bash "$root/scripts/review_packet.sh" uncommitted "$rpkt_tmp/out_u" >/dev/null 2>&1 )
+  rpkt_rc=$?
+  if [ "$rpkt_rc" -eq 0 ] && [ -s "$rpkt_tmp/out_u/packet.md" ] && \
+     grep -q 'UNCOMMITTED-MARKER-42' "$rpkt_tmp/out_u/packet.md"; then
+    ok "review_packet uncommitted happy path (packet contains diff)"
+  else bad "review_packet uncommitted happy path broken (rc=$rpkt_rc)"; fi
+  # staged happy path.
+  ( cd "$rpkt_tmp" && git add f.txt )
+  ( cd "$rpkt_tmp" && bash "$root/scripts/review_packet.sh" staged "$rpkt_tmp/out_s" >/dev/null 2>&1 )
+  rpkt_rc=$?
+  if [ "$rpkt_rc" -eq 0 ] && [ -s "$rpkt_tmp/out_s/packet.md" ] && \
+     grep -q 'UNCOMMITTED-MARKER-42' "$rpkt_tmp/out_s/packet.md"; then
+    ok "review_packet staged happy path (packet contains staged diff)"
+  else bad "review_packet staged happy path broken (rc=$rpkt_rc)"; fi
+  # back:2 — ≥3 commits; packet must include changes from the last 2 commits.
+  ( cd "$rpkt_tmp" && git commit -q -m c1 && printf 'BACK2-A\n' >> f.txt && git add f.txt && git commit -q -m c2 && \
+    printf 'BACK2-B\n' >> f.txt && git add f.txt && git commit -q -m c3 )
+  ( cd "$rpkt_tmp" && bash "$root/scripts/review_packet.sh" back:2 "$rpkt_tmp/out_b" >/dev/null 2>&1 )
+  rpkt_rc=$?
+  if [ "$rpkt_rc" -eq 0 ] && grep -q 'BACK2-A' "$rpkt_tmp/out_b/packet.md" && \
+     grep -q 'BACK2-B' "$rpkt_tmp/out_b/packet.md"; then
+    ok "review_packet back:2 includes last 2 commits"
+  else bad "review_packet back:2 broken (rc=$rpkt_rc)"; fi
+  # back:x (non-numeric) → exit 2.
+  ( cd "$rpkt_tmp" && bash "$root/scripts/review_packet.sh" back:x "$rpkt_tmp/out_x" >/dev/null 2>&1 )
+  rpkt_rc=$?
+  if [ "$rpkt_rc" -eq 2 ]; then ok "review_packet back:x (non-numeric) -> exit 2"
+  else bad "review_packet back:x should exit 2 (rc=$rpkt_rc)"; fi
+else echo "  note  SKIP review_packet in-repo checks (git init unavailable)"; fi
+rm -rf "$rpkt_tmp"
+
+echo "-- runner guard checks --"
+# Fake CLIs only — never call real paid models. Oversized-prompt / argv / min-output floors.
+rg_tmp="$(mktemp -d "${TMPDIR:-/tmp}/pfo_rg.XXXXXX")"
+rg_prompt="$(mktemp "${TMPDIR:-/tmp}/pfo_rg_p.XXXXXX")"
+rg_out="$(mktemp "${TMPDIR:-/tmp}/pfo_rg_o.XXXXXX")"
+# Oversized prompt (>10 bytes) for size-guard tests.
+printf 'OVERSIZED-PROMPT-BODY\n' > "$rg_prompt"
+# Fake codex: writes a sentinel if ever invoked.
+cat > "$rg_tmp/codex" <<EOF
+#!/usr/bin/env bash
+if [ "\${1:-}" = "--version" ]; then echo "codex fake"; exit 0; fi
+: > "$rg_tmp/codex_invoked"
+# Capture argv for FUSION_NO_WEB checks; write a plausible-size answer when -o is present.
+printf '%s\n' "\$@" >> "$rg_tmp/codex_args"
+out=""; prev=""
+for a in "\$@"; do [ "\$prev" = "-o" ] && out="\$a"; prev="\$a"; done
+cat >/dev/null
+[ -n "\$out" ] && { printf 'CODEX-ANSWER '; head -c 300 /dev/zero | tr '\\0' 'x'; echo; } > "\$out"
+exit 0
+EOF
+# Fake gemini (legacy): sentinel on invoke.
+cat > "$rg_tmp/gemini" <<EOF
+#!/usr/bin/env bash
+if [ "\${1:-}" = "--version" ]; then echo "gemini fake"; exit 0; fi
+: > "$rg_tmp/gemini_invoked"
+cat >/dev/null
+printf 'GEMINI-ANSWER '; head -c 300 /dev/zero | tr '\\0' 'g'; echo
+exit 0
+EOF
+# Fake agy: sentinel on invoke; default answer is large enough to pass the floor unless overridden.
+cat > "$rg_tmp/agy" <<EOF
+#!/usr/bin/env bash
+if [ "\${1:-}" = "--version" ]; then echo "agy fake"; exit 0; fi
+: > "$rg_tmp/agy_invoked"
+while [ "\$#" -gt 0 ]; do
+  case "\$1" in
+    --print|-p|--prompt)
+      if [ "\${FUSION_FAKE_AGY_TINY:-0}" = "1" ]; then printf 'x\n'; else printf 'AGY-ANSWER '; head -c 300 /dev/zero | tr '\\0' 'y'; echo; fi
+      exit 0
+      ;;
+  esac
+  shift
+done
+exit 1
+EOF
+chmod +x "$rg_tmp/codex" "$rg_tmp/gemini" "$rg_tmp/agy"
+# FUSION_MAX_PROMPT_BYTES=10 → run_codex exits 2, fake never invoked.
+rm -f "$rg_tmp/codex_invoked"
+PATH="$rg_tmp:/usr/bin:/bin" FUSION_MAX_PROMPT_BYTES=10 \
+  "$sh_bin" "$root/scripts/run_codex.sh" "$rg_prompt" "$rg_out" >/dev/null 2>&1
+rg_rc=$?
+if [ "$rg_rc" -eq 2 ] && [ ! -e "$rg_tmp/codex_invoked" ]; then
+  ok "run_codex prompt-size guard exits 2 without invoking codex"
+else bad "run_codex prompt-size guard broken (rc=$rg_rc, invoked=$([ -e "$rg_tmp/codex_invoked" ] && echo yes || echo no))"; fi
+# Same guard on legacy gemini path.
+rm -f "$rg_tmp/gemini_invoked"
+PATH="$rg_tmp:/usr/bin:/bin" FUSION_GEMINI_BACKEND=gemini FUSION_ALLOW_LEGACY_GEMINI=1 FUSION_MAX_PROMPT_BYTES=10 \
+  "$sh_bin" "$root/scripts/run_gemini.sh" "$rg_prompt" "$rg_out" >/dev/null 2>&1
+rg_rc=$?
+if [ "$rg_rc" -eq 2 ] && [ ! -e "$rg_tmp/gemini_invoked" ]; then
+  ok "run_gemini legacy prompt-size guard exits 2 without invoking gemini"
+else bad "run_gemini prompt-size guard broken (rc=$rg_rc, invoked=$([ -e "$rg_tmp/gemini_invoked" ] && echo yes || echo no))"; fi
+# Antigravity ARG_MAX hard-fail: FUSION_ANTIGRAVITY_MAX_ARG_BYTES=10, fake agy never invoked.
+rm -f "$rg_tmp/agy_invoked"
+PATH="$rg_tmp:/usr/bin:/bin" FUSION_ANTIGRAVITY_MAX_ARG_BYTES=10 \
+  "$sh_bin" "$root/scripts/run_antigravity.sh" "$rg_prompt" "$rg_out" >/dev/null 2>&1
+rg_rc=$?
+if [ "$rg_rc" -eq 2 ] && [ ! -e "$rg_tmp/agy_invoked" ]; then
+  ok "run_antigravity arg-bytes guard exits 2 without invoking agy"
+else bad "run_antigravity arg-bytes guard broken (rc=$rg_rc, invoked=$([ -e "$rg_tmp/agy_invoked" ] && echo yes || echo no))"; fi
+# Min-output floor: tiny agy stdout → exit 1.
+printf 'tiny-prompt\n' > "$rg_prompt"; : > "$rg_out"
+rm -f "$rg_tmp/agy_invoked"
+PATH="$rg_tmp:/usr/bin:/bin" FUSION_FAKE_AGY_TINY=1 FUSION_MIN_OUTPUT_BYTES=200 FUSION_ANTIGRAVITY_MAX_ARG_BYTES=0 \
+  "$sh_bin" "$root/scripts/run_antigravity.sh" "$rg_prompt" "$rg_out" >/dev/null 2>&1
+rg_rc=$?
+if [ "$rg_rc" -eq 1 ]; then ok "run_antigravity min-output floor rejects tiny answer (exit 1)"
+else bad "run_antigravity min-output floor broken (rc=$rg_rc, want 1)"; fi
+# FUSION_NO_WEB argv: with =1 → read-only, no web_search; without → web_search present.
+printf 'no-web-prompt\n' > "$rg_prompt"; : > "$rg_out"
+rm -f "$rg_tmp/codex_args" "$rg_tmp/codex_invoked"
+PATH="$rg_tmp:/usr/bin:/bin" FUSION_NO_WEB=1 FUSION_MAX_PROMPT_BYTES=0 FUSION_MIN_OUTPUT_BYTES=0 \
+  "$sh_bin" "$root/scripts/run_codex.sh" "$rg_prompt" "$rg_out" >/dev/null 2>&1
+if [ -f "$rg_tmp/codex_args" ] && grep -q 'read-only' "$rg_tmp/codex_args" && \
+   ! grep -q 'web_search' "$rg_tmp/codex_args"; then
+  ok "run_codex FUSION_NO_WEB=1 passes read-only and omits web_search"
+else bad "run_codex FUSION_NO_WEB=1 argv assertion failed"; fi
+rm -f "$rg_tmp/codex_args" "$rg_tmp/codex_invoked"
+PATH="$rg_tmp:/usr/bin:/bin" FUSION_MAX_PROMPT_BYTES=0 FUSION_MIN_OUTPUT_BYTES=0 \
+  "$sh_bin" "$root/scripts/run_codex.sh" "$rg_prompt" "$rg_out" >/dev/null 2>&1
+if [ -f "$rg_tmp/codex_args" ] && grep -q 'web_search' "$rg_tmp/codex_args"; then
+  ok "run_codex default argv enables web_search"
+else bad "run_codex default web_search argv assertion failed"; fi
+rm -rf "$rg_tmp" "$rg_prompt" "$rg_out"
+
+echo "-- watchdog fallback --"
+# Minimal PATH of real binaries WITHOUT timeout/gtimeout so fusion_run_with_timeout uses the
+# bash watchdog path. Assert hard kill under the limit, no orphan sleep, and exit-code passthrough.
+wd_tmp="$(mktemp -d "${TMPDIR:-/tmp}/pfo_wd.XXXXXX")"
+for b in bash sleep kill pkill pgrep date true false; do
+  src="$(command -v "$b" 2>/dev/null || true)"
+  if [ -n "$src" ] && [ -e "$src" ]; then ln -sf "$src" "$wd_tmp/$b"; fi
+done
+# Ensure timeout/gtimeout are absent from the sandbox PATH even if linked by name collision.
+rm -f "$wd_tmp/timeout" "$wd_tmp/gtimeout"
+(
+  # Subshell isolation: source backend helpers under the stripped PATH.
+  export PATH="$wd_tmp"
+  # shellcheck disable=SC1091
+  . "$root/scripts/gemini_backend.sh"
+  # Slow command must be cut short (well under 10s) and return nonzero; no orphan sleep.
+  wd_self=$BASHPID
+  SECONDS=0
+  fusion_run_with_timeout 1 sleep 10
+  wd_rc=$?
+  wd_elapsed=$SECONDS
+  # Any remaining sleep children of this subshell are orphans ($wd_self: captured before the
+  # command substitution forks its own subshell).
+  wd_orphans="$(pgrep -P "$wd_self" -x sleep 2>/dev/null || true)"
+  if [ "$wd_rc" -ne 0 ] && [ "$wd_elapsed" -le 8 ] && [ -z "$wd_orphans" ]; then
+    ok "watchdog fallback kills slow command under limit (rc=$wd_rc, ${wd_elapsed}s, no orphans)"
+  else
+    bad "watchdog fallback slow-path broken (rc=$wd_rc, ${wd_elapsed}s, orphans='${wd_orphans}')"
+  fi
+  # Exit codes pass through unchanged.
+  fusion_run_with_timeout 5 bash -c 'exit 7'
+  wd_rc=$?
+  if [ "$wd_rc" -eq 7 ]; then ok "watchdog fallback preserves exit 7"
+  else bad "watchdog fallback exit passthrough failed (rc=$wd_rc, want 7)"; fi
+  fusion_run_with_timeout 5 bash -c 'exit 0'
+  wd_rc=$?
+  if [ "$wd_rc" -eq 0 ]; then ok "watchdog fallback preserves exit 0"
+  else bad "watchdog fallback success passthrough failed (rc=$wd_rc, want 0)"; fi
+)
+rm -rf "$wd_tmp"
 
 echo
 echo "== result: $pass passed, $fail failed =="

@@ -32,3 +32,9 @@
 - id: cjk_max_quality
   task: "用最高质量帮我判断这个架构选型"
   workflow: full_blind_panel
+- id: optimization_checkout
+  task: "make checkout faster and measure it"
+  workflow: measure_change_remeasure
+- id: handoff_next_agent
+  task: "prepare a handoff for the next agent"
+  workflow: single_model
