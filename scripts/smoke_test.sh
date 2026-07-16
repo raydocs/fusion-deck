@@ -455,8 +455,8 @@ else echo "  note  SKIP preflight in-repo check (git init unavailable)"; fi
 rm -rf "$pf_tmp"
 
 echo "-- review_packet offline checks --"
-# Temp repo + ok/bad helpers, same isolation style as preflight. Do NOT test bare-branch-name
-# scopes here — that behavior is intentionally deferred to a later batch.
+# Temp repo + ok/bad helpers, same isolation style as preflight.
+# Bare branch names normalize to <branch>...HEAD (merge-base); unknown refs exit 2.
 rpkt_tmp="$(mktemp -d "${TMPDIR:-/tmp}/pfo_rpkt.XXXXXX")"
 # Outside a git repo → nonzero (exit 2).
 ( cd "$rpkt_tmp" && bash "$root/scripts/review_packet.sh" uncommitted "$rpkt_tmp/out" >/dev/null 2>&1 )
@@ -500,6 +500,28 @@ if ( cd "$rpkt_tmp" && git init -q && git config user.email t@t && git config us
   rpkt_rc=$?
   if [ "$rpkt_rc" -eq 2 ]; then ok "review_packet back:x (non-numeric) -> exit 2"
   else bad "review_packet back:x should exit 2 (rc=$rpkt_rc)"; fi
+  # Bare branch name → normalize to merge-base range (main...HEAD), not tip-diff.
+  # Setup: main advances AFTER feature diverges; feature has its own commit.
+  ( cd "$rpkt_tmp" && git checkout -q -b main 2>/dev/null || git checkout -q main
+    git checkout -q -b feat-norm
+    printf 'FEAT-SIDE-CHANGE\n' >> f.txt && git add f.txt && git commit -q -m feat-side
+    git checkout -q main
+    printf 'MAIN-ONLY-CHANGE\n' >> f.txt && git add f.txt && git commit -q -m main-only
+    git checkout -q feat-norm )
+  rpkt_err="$rpkt_tmp/norm.err"
+  ( cd "$rpkt_tmp" && bash "$root/scripts/review_packet.sh" main "$rpkt_tmp/out_norm" >"$rpkt_tmp/norm.out" 2>"$rpkt_err" )
+  rpkt_rc=$?
+  if [ "$rpkt_rc" -eq 0 ] && [ -s "$rpkt_tmp/out_norm/packet.md" ] && \
+     grep -q 'FEAT-SIDE-CHANGE' "$rpkt_tmp/out_norm/packet.md" && \
+     ! grep -q 'MAIN-ONLY-CHANGE' "$rpkt_tmp/out_norm/packet.md" && \
+     grep -qi 'normalized' "$rpkt_err"; then
+    ok "review_packet bare branch main normalizes to merge-base (not tip-diff)"
+  else bad "review_packet bare-branch normalize broken (rc=$rpkt_rc)"; fi
+  # Unknown bare ref → exit 2.
+  ( cd "$rpkt_tmp" && bash "$root/scripts/review_packet.sh" nosuchbranch "$rpkt_tmp/out_nosuch" >/dev/null 2>&1 )
+  rpkt_rc=$?
+  if [ "$rpkt_rc" -eq 2 ]; then ok "review_packet unknown scope nosuchbranch -> exit 2"
+  else bad "review_packet nosuchbranch should exit 2 (rc=$rpkt_rc)"; fi
 else echo "  note  SKIP review_packet in-repo checks (git init unavailable)"; fi
 rm -rf "$rpkt_tmp"
 

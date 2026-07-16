@@ -27,7 +27,17 @@ case "$scope" in
     case "$n" in ''|*[!0-9]*) echo "review_packet: bad back:N '$scope'" >&2; exit 2 ;; esac
     range="HEAD~$n..HEAD"; header="last $n commit(s): $range"
     log_cmd=(git log --oneline "$range"); stat_cmd=(git diff --stat "$range"); diff_cmd=(git diff -U10 "$range") ;;
-  *)           range="$scope"; header="range: $range"
+  *)
+    if [[ "$scope" == *..* ]]; then
+      range="$scope"; header="range: $range"
+    elif git rev-parse --verify --quiet "${scope}^{commit}" >/dev/null; then
+      range="${scope}...HEAD"
+      header="range: $range (normalized from '$scope', merge-base diff)"
+      echo "review_packet: scope '$scope' normalized to '$range'" >&2
+    else
+      echo "review_packet: unknown scope '$scope'" >&2
+      exit 2
+    fi
     log_cmd=(git log --oneline "$range"); stat_cmd=(git diff --stat "$range"); diff_cmd=(git diff -U10 "$range") ;;
 esac
 
