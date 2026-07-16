@@ -12,15 +12,15 @@
 #   - runtime honest-degrade gate (exit 13 without override; exit 1 if both CLIs fail)
 #
 # Manifest schema is the v2 unified form (REQUESTED_PANEL_MODE / REALIZED_PANEL_MODE /
-# REALIZED_PANEL_STATE / OPUS_PANELISTS=…). The legacy INTENDED_PANEL_STATE and
-# OPUS_PANELIST=added-by-orchestrator fields are not written.
+# REALIZED_PANEL_STATE / CLAUDE_PANELISTS=…). The legacy INTENDED_PANEL_STATE and
+# CLAUDE_PANELIST=added-by-orchestrator fields are not written.
 #
 # Usage:
 #   run_triple_fusion.sh <prompt_file> <out_dir> [reasoning_effort]
 #
 # IMPORTANT — what this script does NOT do:
-#   It does NOT spawn the Opus 4.8 panelist, and it does NOT judge. Only the Claude Code
-#   orchestrator can spawn an Opus panelist and only Opus 4.8 judges/synthesizes.
+#   It does NOT spawn the Claude (the session model) panelist, and it does NOT judge. Only the Claude Code
+#   orchestrator can spawn a Claude panelist and only Claude judges/synthesizes.
 
 set -uo pipefail
 # Resolve this script's directory with bash builtins only (no dirname) so PATH=/nonexistent

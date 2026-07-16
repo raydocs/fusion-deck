@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # assert_triple_panel.sh — HARD GATE for premium mode (compat wrapper).
 #
-# In premium mode the panel MUST be the full triple: Opus 4.8 (always present) + GPT-5.6 Sol (codex)
+# In premium mode the panel MUST be the full triple: Claude (the session model; always present) + GPT-5.6 Sol (codex)
 # + Gemini 3.1 Pro (Antigravity CLI by default, legacy gemini only when explicit). This script enforces
 # that the codex CLI and a Gemini backend are present and exits
 # non-zero with an actionable remediation message if either is missing — so a caller can NEVER

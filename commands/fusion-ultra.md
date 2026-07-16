@@ -1,5 +1,5 @@
 ---
-description: Maximum-quality v2 workflow: blind first round, contradiction matrix, targeted probes, verifier, then final Opus synthesis.
+description: Maximum-quality v2 workflow: blind first round, contradiction matrix, targeted probes, verifier, then final Claude synthesis.
 argument-hint: [hard task requiring maximum quality]
 ---
 
@@ -20,7 +20,7 @@ panelists: "web search public facts only; do not search with proprietary code."
 ## Step 2 - Round 1 Blind Panel (wide: 4 panelists)
 
 Run the external panel with the v2 runner. Ultra's round 1 is **wide**: the premium triple plus a
-second cold Opus run — same-model self-consistency on top of cross-family diversity, and Opus-vs-Opus
+second cold Claude run — same-model self-consistency on top of cross-family diversity, and Claude-vs-Claude
 disagreement becomes an extra confidence signal for the judge.
 
 ```bash
@@ -31,11 +31,11 @@ bash <skill-root>/scripts/run_panel.sh --mode ultra_two_round "$out/prompt.md" "
 
 Hard-fail unless PREMIUM or `FUSION_ALLOW_DEGRADED=1`; on exit 13 STOP and disclose the realized `PANEL_STATE` from the manifest — never silently continue (`references/degraded-mode.md`).
 
-In the same turn, spawn **two cold Opus panelists** with the same prompt (the manifest's
-`OPUS_PANELISTS=2` confirms the count). Ask every panelist for the answer/recommendation and use the
+In the same turn, spawn **two cold Claude panelists** with the same prompt (the manifest's
+`CLAUDE_PANELISTS=2` confirms the count). Ask every panelist for the answer/recommendation and use the
 standard five-line footer from `references/panel-prompt.md`.
 
-**Checkpoint before ending this turn: BOTH the backgrounded Bash call AND the Opus spawn must have gone out in this same message; if only one did, launch the other immediately and disclose in the audit trail that the panel was not fully concurrent.**
+**Checkpoint before ending this turn: BOTH the backgrounded Bash call AND the Claude spawn must have gone out in this same message; if only one did, launch the other immediately and disclose in the audit trail that the panel was not fully concurrent.**
 
 ## Step 3 - Contradiction Matrix
 
@@ -49,14 +49,15 @@ each probe must pass the discriminating-oracle test before you spend a second ro
 
 - Codex: code trace, tests, patch feasibility, concrete implementation checks.
 - Gemini/Antigravity: long-context cross-check, missing constraints, alternate framing.
-- Opus: synthesis, risk framing, final decision.
+- Claude: synthesis, risk framing, final decision.
 
 Run deterministic verifiers when available. Deterministic verifiers per ecosystem are catalogued in
 `references/verifier-recipes.md`.
 
 ## Step 5 - Final
 
-Lead with the final deliverable. Then disclose: realized panel state/mode, contradiction matrix summary,
+Lead with the final deliverable. Then disclose: realized panel state/mode, the actual Claude model of this
+session (e.g. "Claude seat/judge: <your actual model name>"), contradiction matrix summary,
 targeted probes, verifier results, residual uncertainty, and run id.
 
 If `$ARGUMENTS` contains `--export`, also persist the final deliverable to a repo-local file and return

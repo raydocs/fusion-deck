@@ -1,6 +1,6 @@
 # Degraded mode — policy
 
-The PREMIUM panel is the full triple (Opus 4.8 + GPT-5.6 Sol + Gemini 3.1 Pro). Gemini 3.1 Pro is provided
+The PREMIUM panel is the full triple (Claude (the session model) + GPT-5.6 Sol + Gemini 3.1 Pro). Gemini 3.1 Pro is provided
 by Antigravity CLI (`agy`) by default; legacy `gemini` is only used when explicitly enabled. When an
 external CLI/backend is missing the panel is **degraded** — and that must always be **explicit and
 disclosed**, never silently faked. This is the skill's cardinal rule. Pin `FUSION_CODEX_MODEL` (e.g.
@@ -31,7 +31,7 @@ state, and let the user choose: retry, or re-run accepting the degraded panel wi
 
 A panelist must never convene its own panel — nested panels break the blindness invariant and can loop.
 The runners stamp the panelist process tree with `FUSION_PANEL_CHILD=1`; every gate/runner script
-refuses with exit **14** when it sees that marker. The Opus panelist (a spawned subagent, no env
+refuses with exit **14** when it sees that marker. The Claude panelist (a spawned subagent, no env
 inheritance) is bound by the instruction in `panel-prompt.md`: it answers directly and never invokes
 fusion commands.
 
@@ -43,7 +43,7 @@ read as degraded. If degraded, also say how to enable PREMIUM (install the missi
 ## Treating a dropped panelist
 A panelist that's missing, errored, or was dropped is **absent** to the judge — never counted as silent
 agreement. With one external CLI down, the panel is still a real (smaller) panel; with both down, it
-degrades to `OPUS_ONLY` (two cold Opus runs), which is the floor — always available.
+degrades to `CLAUDE_ONLY` (two cold Claude runs), which is the floor — always available.
 
 `FUSION_ALLOW_DEGRADED` is the operator's explicit escape hatch. It must always produce a visible banner;
 it must never become a silent default.

@@ -31,7 +31,7 @@ risk, recommended workflow, initial panel size, escalation threshold, early-stop
 - `pair_review_then_verify`: build the review packet, run an intentional pair via `run_panel.sh`, verify
   high-severity findings against real code, and escalate to triple only on blocking disagreement or failed
   verifier.
-- `pair_blind_panel`: run `opus_gpt_pair` or `opus_gemini_pair` via `run_panel.sh` based on context, then
+- `pair_blind_panel`: run `claude_gpt_pair` or `claude_gemini_pair` via `run_panel.sh` based on context, then
   judge. Escalate to triple on high risk or unresolved contradiction.
 - `evidence_first_investigate`: follow `/fusion-investigate`; only panel surviving hypotheses.
 - `measure_change_remeasure`: follow `/fusion-optimize`; panel only stop/continue decisions.

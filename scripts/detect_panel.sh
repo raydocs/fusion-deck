@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
 # detect_panel.sh — report which panelist CLIs are installed and the richest HONEST panel.
 #
-# fusion-deck fans a prompt out to a panel of models in parallel, then Opus 4.8
-# judges. Opus 4.8 is ALWAYS a panelist (via the Agent/Task tool, in-process subagents) and is
+# fusion-deck fans a prompt out to a panel of models in parallel, then Claude (the session model)
+# judges. Claude is ALWAYS a panelist (via the Agent/Task tool, in-process subagents) and is
 # ALWAYS the judge — it needs no CLI. This script only probes the EXTERNAL panelist CLIs
 # (GPT-5.6 Sol via `codex`, Gemini 3.1 Pro via Antigravity CLI or explicit legacy `gemini`) and reports the
 # richest panel the machine
 # can currently support.
 #
 # It NEVER pretends a missing CLI is present: a degraded machine is reported as DEGRADED_* or
-# OPUS_ONLY, never as PREMIUM. Silently faking the premium triple is the cardinal sin of this skill.
+# CLAUDE_ONLY, never as PREMIUM. Silently faking the premium triple is the cardinal sin of this skill.
 #
 # Output: human-readable lines + two greppable lines the orchestrator keys on:
-#   PANEL_STATE=<PREMIUM|DEGRADED_OPUS_GPT5|DEGRADED_OPUS_GEMINI|OPUS_ONLY>
-#   SLUG=<opus4.8-gpt5.6sol-gemini3.1pro|opus4.8-gpt5.6sol|opus4.8-gemini3.1pro|opus4.8-4.8>
+#   PANEL_STATE=<PREMIUM|DEGRADED_CLAUDE_GPT|DEGRADED_CLAUDE_GEMINI|CLAUDE_ONLY>
+#   SLUG=<claude-gpt5.6sol-gemini3.1pro|claude-gpt5.6sol|claude-gemini3.1pro|claude-x2>
 #
 # The human "panelist availability" banner prints only when the state is NOT PREMIUM (remediation
 # matters) or when --verbose is passed. Greppable PANEL_STATE=/SLUG=/GEMINI_BACKEND= always print.
@@ -47,10 +47,10 @@ codex_ok=false; gemini_ok=false
 have codex  && codex_ok=true
 fusion_detect_gemini_backend && gemini_ok=true
 
-if   $codex_ok && $gemini_ok; then state="PREMIUM";              slug="opus4.8-gpt5.6sol-gemini3.1pro"
-elif $codex_ok;                then state="DEGRADED_OPUS_GPT5";   slug="opus4.8-gpt5.6sol"
-elif $gemini_ok;               then state="DEGRADED_OPUS_GEMINI"; slug="opus4.8-gemini3.1pro"
-else                                state="OPUS_ONLY";            slug="opus4.8-4.8"
+if   $codex_ok && $gemini_ok; then state="PREMIUM";              slug="claude-gpt5.6sol-gemini3.1pro"
+elif $codex_ok;                then state="DEGRADED_CLAUDE_GPT";   slug="claude-gpt5.6sol"
+elif $gemini_ok;               then state="DEGRADED_CLAUDE_GEMINI"; slug="claude-gemini3.1pro"
+else                                state="CLAUDE_ONLY";            slug="claude-x2"
 fi
 
 show_banner=false
@@ -59,8 +59,8 @@ if $verbose || [ "$state" != "PREMIUM" ]; then
 fi
 
 if $show_banner; then
-  echo "panelist availability (Opus 4.8 is always a panelist + the judge, via Agent/Task subagents):"
-  echo "  opus4.8       : yes (Agent subagents — always available)"
+  echo "panelist availability (Claude is always a panelist + the judge, via Agent/Task subagents):"
+  echo "  claude       : yes (Agent subagents — the session model; always available)"
   printf "  gpt5.6sol        : %s (codex CLI)\n"  "$([ "$codex_ok"  = true ] && echo yes || echo NO)"
   if $gemini_ok; then
     printf "  gemini3.1pro  : yes (%s via %s)\n" "${FUSION_GEMINI_BACKEND_RESOLVED:-?}" "${FUSION_GEMINI_BACKEND_BINARY:-?}"
@@ -70,7 +70,7 @@ if $show_banner; then
   echo
 
   case "$state" in
-    PREMIUM) echo "panel: PREMIUM triple available (Opus 4.8 + GPT-5.6 Sol + Gemini 3.1 Pro)." ;;
+    PREMIUM) echo "panel: PREMIUM triple available (Claude + GPT-5.6 Sol + Gemini 3.1 Pro)." ;;
     *)       echo "panel: $state — NOT the premium triple. Install the missing CLI(s) to enable PREMIUM:"
              $codex_ok  || echo "    - codex  (GPT-5.6 Sol):       https://developers.openai.com/codex"
              $gemini_ok || echo "    - agy    (Gemini 3.1 Pro): https://antigravity.google/docs/cli-install" ;;

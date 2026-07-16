@@ -84,7 +84,7 @@ Most investigations end here without a panel, and that is the **expected, cheape
   default; `--panel` overrides it when you want the cross-check on a high-stakes call anyway.
 - **≥2 hypotheses genuinely survive the evidence** → fan the **competing theories + the evidence ledger**
   to the `/fusion` panel (read `commands/fusion.md`). This is a **Track B** adjudication (see
-  `judge-rubric.md`): the panelists each weigh which cause the *ledger* supports; Opus 4.8 judges
+  `judge-rubric.md`): the panelists each weigh which cause the *ledger* supports; Claude (the session model) judges
   consensus / contradictions / which cause the evidence backs / blind spots — it does not re-investigate
   from memory. The question to the panel is "which of these located hypotheses does this evidence support,
   and what's missing?" — not "what's the bug?"

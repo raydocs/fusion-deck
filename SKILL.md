@@ -6,7 +6,7 @@ description: Higher-confidence answers and careful execution. `/fusion` fans a h
 # fusion-deck
 
 A premium decision-and-execution toolkit. It does two things well: **think hard** (fan a question out to
-the strongest models in parallel, blind, and let Opus 4.8 judge) and **orchestrate** (turn a vague ask
+the strongest models in parallel, blind, and let Claude (the session model) judge) and **orchestrate** (turn a vague ask
 into a verifiable contract, curate context, decompose into scoped subagent work, verify each step, and
 hand off cleanly). It is a Claude Code **skill** — markdown commands plus small bash/python helpers.
 There is no MCP server, no UI, no OpenRouter, no model-config platform.
@@ -23,10 +23,10 @@ The PREMIUM panel is the full triple. Availability is reported by `scripts/detec
 
 | PANEL_STATE | Panel | Slug |
 | --- | --- | --- |
-| `PREMIUM` | Opus 4.8 + GPT-5.6 Sol + Gemini 3.1 Pro (`agy` by default) | `opus4.8-gpt5.6sol-gemini3.1pro` |
-| `DEGRADED_OPUS_GPT5` | Opus 4.8 + GPT-5.6 Sol | `opus4.8-gpt5.6sol` |
-| `DEGRADED_OPUS_GEMINI` | Opus 4.8 + Gemini 3.1 Pro | `opus4.8-gemini3.1pro` |
-| `OPUS_ONLY` | two cold Opus 4.8 runs | `opus4.8-4.8` |
+| `PREMIUM` | Claude + GPT-5.6 Sol + Gemini 3.1 Pro (`agy` by default) | `claude-gpt5.6sol-gemini3.1pro` |
+| `DEGRADED_CLAUDE_GPT` | Claude + GPT-5.6 Sol | `claude-gpt5.6sol` |
+| `DEGRADED_CLAUDE_GEMINI` | Claude + Gemini 3.1 Pro | `claude-gemini3.1pro` |
+| `CLAUDE_ONLY` | two cold Claude runs | `claude-x2` |
 
 **The cardinal rule: never silently fake the premium triple.** Premium commands call
 `scripts/assert_triple_panel.sh`, which hard-fails unless `codex` and a Gemini backend are present. An operator who
@@ -43,9 +43,9 @@ independent cross-checking changes the answer's risk profile**; everywhere else,
 
 | Command | What it does | Panel by default? |
 | --- | --- | --- |
-| `/fusion` | Fan a hard question to the panel; Opus judges and writes the answer. `--wide` adds a second cold Opus (4 panelists). | **Yes** |
+| `/fusion` | Fan a hard question to the panel; Claude judges and writes the answer. `--wide` adds a second cold Claude (4 panelists). | **Yes** |
 | `/fusion-auto` | Route a task through v2: pick workflow, verify, and escalate only when needed. | Router decides |
-| `/fusion-ultra` | Max-quality two-round workflow: **wide** blind panel (Opus ×2 + GPT + Gemini) → contradiction matrix → targeted probes → verifier. | **Yes + targeted probes** |
+| `/fusion-ultra` | Max-quality two-round workflow: **wide** blind panel (Claude ×2 + GPT + Gemini) → contradiction matrix → targeted probes → verifier. | **Yes + targeted probes** |
 | `/fusion-review` | Audit code/a plan via the panel; structured, cross-checked findings. | **Yes** |
 | `/fusion-investigate` | Evidence-first root-cause investigation; panel adjudicates competing hypotheses. | By exception — only when ≥2 hypotheses survive the evidence; `--panel` forces it |
 | `/fusion-plan` | Turn a vague request into a Claude Code Workflow Contract; `--deep` adds involvement + a critique pass. | No — single model; `--panel` to escalate a genuinely ambiguous, high-stakes planning question |
@@ -93,7 +93,7 @@ the cheaper/narrower one and say what the other would add.
 
 1. **Never fake premium.** Disclose the real PANEL_STATE; degrade only explicitly. (`degraded-mode.md`)
 2. **Blind panel.** Panelists never see each other's work; only the judge sees all answers, and only
-   after every panelist returns. **Opus 4.8 always judges.** (`panel-prompt.md`, `judge-rubric.md`)
+   after every panelist returns. **Claude always judges.** (`panel-prompt.md`, `judge-rubric.md`)
 3. **Orchestrator never implements.** In `/fusion-orchestrate`, the orchestrator only plans, decomposes,
    delegates, and verifies; it reads files **only to verify** and makes all code changes **inside Task
    subagents**. One level of fan-out. (`orchestration-rubric.md`)

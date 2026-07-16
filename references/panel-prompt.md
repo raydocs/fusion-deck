@@ -17,13 +17,13 @@ Panelists must **never** see each other's work, and the orchestrator must not pr
 handing it over. Enforce this mechanically, not just by intent:
 
 - Every panelist gets the **same prompt file** and writes to a **separate output file**
-  (`scripts/run_triple_fusion.sh` does this for the CLI panelists; spawn the Opus panelist with the same
+  (`scripts/run_triple_fusion.sh` does this for the CLI panelists; spawn the Claude panelist with the same
   prompt and let it return its own answer).
 - Never paste one panelist's output (or status) into another's prompt.
-- The Opus panelist's brief contains **only the user's question** — not the conversation, not the other
+- The Claude panelist's brief contains **only the user's question** — not the conversation, not the other
   panelists' outputs, not your own notes.
 - The **judge runs strictly after all panelists return.** The pipeline can't be reversed: panelist models
-  can't call back out to spawn Opus, so **Opus 4.8 is always the judge/driver.**
+  can't call back out to spawn Claude, so **Claude (the session model) is always the judge/driver.**
 
 ## The exact prompt each panelist gets
 
@@ -63,9 +63,9 @@ Judge-side counterpart: `judge-rubric.md`.
 
 ## Panel composition per PANEL_STATE / slug
 
-- `PREMIUM` (`opus4.8-gpt5.6sol-gemini3.1pro`) — Opus 4.8 + GPT-5.6 Sol (codex) + Gemini 3.1 Pro (`agy` by default), blind and parallel, then Opus judges.
-- `OPUS_ONLY` (`opus4.8-4.8`) — **two** independent cold Opus 4.8 runs, then judged.
+- `PREMIUM` (`claude-gpt5.6sol-gemini3.1pro`) — Claude + GPT-5.6 Sol (codex) + Gemini 3.1 Pro (`agy` by default), blind and parallel, then Claude judges.
+- `CLAUDE_ONLY` (`claude-x2`) — **two** independent cold Claude runs, then judged.
 
-In every case Opus 4.8 also judges, and the judge is kept separate from the panelists (panelists are
+In every case Claude also judges, and the judge is kept separate from the panelists (panelists are
 spawned; the orchestrator judges) so the synthesis reads the answers fresh rather than defending one it
 wrote. Full modes: `references/panel-modes.md`.

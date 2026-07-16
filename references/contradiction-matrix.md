@@ -9,7 +9,7 @@ averaging answers.
   "contradictions": [
     {
       "claim": "",
-      "positions": { "opus_a": "", "opus_b": "", "gpt": "", "gemini": "" },
+      "positions": { "claude_a": "", "claude_b": "", "gpt": "", "gemini": "" },
       "severity": "blocking | non_blocking",
       "needs": "test | source | code trace | user decision"
     }
@@ -17,7 +17,7 @@ averaging answers.
   "blind_spots": [],
   "targeted_probes": [
     {
-      "assignee": "codex | gemini | opus | deterministic",
+      "assignee": "codex | gemini | claude | deterministic",
       "question": "",
       "required_output": ""
     }
@@ -26,8 +26,8 @@ averaging answers.
 ```
 
 `positions` is keyed per **realized** panelist from the manifest — include one key per realized panelist;
-an absent panelist gets **no key** (absence ≠ agreement). In wide/ultra rounds the two cold Opus runs get
-separate keys (`opus_a`, `opus_b`) — Opus-vs-Opus disagreement is a paid-for signal, never merge them.
+an absent panelist gets **no key** (absence ≠ agreement). In wide/ultra rounds the two cold Claude runs get
+separate keys (`claude_a`, `claude_b`) — Claude-vs-Claude disagreement is a paid-for signal, never merge them.
 Each `targeted_probes` entry's `required_output` must name its discriminating oracle per
 `references/probe-quality.md`.
 

@@ -23,7 +23,7 @@ case "${1:-}" in
   --mode) mode="${2:-}"; shift 2 ;;
   -h|--help)
     sed -n '2,6p' "$0"
-    echo "usage: assert_panel.sh --mode <single_opus|opus_self_consistency|opus_gpt_pair|opus_gemini_pair|gpt_gemini_pair_plus_opus_judge|premium_triple|premium_wide|ultra_two_round>"
+    echo "usage: assert_panel.sh --mode <single_claude|claude_self_consistency|claude_gpt_pair|claude_gemini_pair|gpt_gemini_pair_plus_claude_judge|premium_triple|premium_wide|ultra_two_round>"
     exit 2 ;;
 esac
 
@@ -33,10 +33,10 @@ fusion_detect_gemini_backend && gemini_ok=true
 
 need_codex=false; need_gemini=false
 case "$mode" in
-  single_opus|opus_self_consistency) ;;
-  opus_gpt_pair) need_codex=true ;;
-  opus_gemini_pair) need_gemini=true ;;
-  gpt_gemini_pair_plus_opus_judge|premium_triple|premium_wide|ultra_two_round) need_codex=true; need_gemini=true ;;
+  single_claude|claude_self_consistency) ;;
+  claude_gpt_pair) need_codex=true ;;
+  claude_gemini_pair) need_gemini=true ;;
+  gpt_gemini_pair_plus_claude_judge|premium_triple|premium_wide|ultra_two_round) need_codex=true; need_gemini=true ;;
   *) echo "[assert_panel] unknown panel mode: $mode" >&2; exit 2 ;;
 esac
 
@@ -44,10 +44,10 @@ esac
 # Single/pair intentional modes map to the closest honest triple-state name.
 panel_state_for_mode() {
   case "$mode" in
-    single_opus|opus_self_consistency) echo "OPUS_ONLY" ;;
-    opus_gpt_pair)                     echo "DEGRADED_OPUS_GPT5" ;;
-    opus_gemini_pair)                  echo "DEGRADED_OPUS_GEMINI" ;;
-    gpt_gemini_pair_plus_opus_judge|premium_triple|premium_wide|ultra_two_round) echo "PREMIUM" ;;
+    single_claude|claude_self_consistency) echo "CLAUDE_ONLY" ;;
+    claude_gpt_pair)                     echo "DEGRADED_CLAUDE_GPT" ;;
+    claude_gemini_pair)                  echo "DEGRADED_CLAUDE_GEMINI" ;;
+    gpt_gemini_pair_plus_claude_judge|premium_triple|premium_wide|ultra_two_round) echo "PREMIUM" ;;
     *) echo "CUSTOM_PANEL" ;;
   esac
 }
@@ -55,9 +55,9 @@ panel_state_for_mode() {
 # Availability → PANEL_STATE when the requested mode is missing CLIs (honest degrade).
 panel_state_for_availability() {
   if   $codex_ok && $gemini_ok; then echo "PREMIUM"
-  elif $codex_ok;               then echo "DEGRADED_OPUS_GPT5"
-  elif $gemini_ok;              then echo "DEGRADED_OPUS_GEMINI"
-  else                             echo "OPUS_ONLY"
+  elif $codex_ok;               then echo "DEGRADED_CLAUDE_GPT"
+  elif $gemini_ok;              then echo "DEGRADED_CLAUDE_GEMINI"
+  else                             echo "CLAUDE_ONLY"
   fi
 }
 

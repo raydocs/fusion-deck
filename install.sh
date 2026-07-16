@@ -105,10 +105,10 @@ Input: \$ARGUMENTS
 EOF
   echo "  wrote /$cmd"
 }
-gen_wrapper fusion             "Fan a hard question to the premium model panel (judged synthesis), Opus judges and writes the answer." "<the hard question or task>"
+gen_wrapper fusion             "Fan a hard question to the premium model panel (judged synthesis), Claude judges and writes the answer." "<the hard question or task>"
 gen_wrapper fusion-auto        "Route a task through fusion-deck v2: choose workflow, verify, and escalate only when needed." "<task> [--quality=fast|balanced|max]"
 gen_wrapper fusion-ultra       "Run the max-quality v2 workflow: blind panel, contradiction matrix, targeted probes, verifier, final synthesis." "<hard task requiring maximum quality>"
-gen_wrapper fusion-review      "Audit code/a plan with the premium model panel (judged synthesis), Opus-judged structured findings." "<diff, files, or design to review>"
+gen_wrapper fusion-review      "Audit code/a plan with the premium model panel (judged synthesis), Claude-judged structured findings." "<diff, files, or design to review>"
 gen_wrapper fusion-investigate "Investigate a bug/'why is it like this' evidence-first; the panel adjudicates competing hypotheses; ends at a root-cause report." "<the bug or question> [--panel]"
 gen_wrapper fusion-plan        "Turn a vague request into a verifiable Claude Code Workflow Contract (not a Codex /goal)." "<the vague request> [--panel] [--deep]"
 gen_wrapper fusion-context     "Build a RepoPrompt-style Context Pack (fixed order, density tiers, token budget)." "<task the pack is for> [paste|handoff|agent]"

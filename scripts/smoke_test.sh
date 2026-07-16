@@ -148,7 +148,7 @@ exit 1
 EOF
 chmod +x "$gb_tmp/codex" "$gb_tmp/gemini"
 gb_default="$(PATH="$gb_tmp:/usr/bin:/bin" "$sh_bin" "$root/scripts/detect_panel.sh" 2>/dev/null)"
-if echo "$gb_default" | grep -q '^PANEL_STATE=DEGRADED_OPUS_GPT5' && \
+if echo "$gb_default" | grep -q '^PANEL_STATE=DEGRADED_CLAUDE_GPT' && \
    echo "$gb_default" | grep -q '^GEMINI_BACKEND=none'; then
   ok "backend auto ignores legacy gemini unless explicitly enabled"
 else bad "backend auto should ignore legacy gemini by default"; fi
@@ -190,23 +190,23 @@ if python3 "$root/scripts/route_task.py" --check "$root/tests/router_cases.yml" 
 else bad "route_task.py should pass tests/router_cases.yml"; fi
 rt="$(python3 "$root/scripts/route_task.py" --task "review my staged diff" 2>/dev/null)"
 echo "$rt" | grep -q '"recommended_workflow": "pair_review_then_verify"' && ok "route_task.py routes review -> pair_review_then_verify" || bad "route_task.py review route mismatch"
-if PATH=/nonexistent "$sh_bin" "$root/scripts/assert_panel.sh" --mode single_opus >/dev/null 2>&1; then
-  ok "assert_panel.sh allows single_opus with no external CLIs"
-else bad "assert_panel.sh single_opus should not need external CLIs"; fi
+if PATH=/nonexistent "$sh_bin" "$root/scripts/assert_panel.sh" --mode single_claude >/dev/null 2>&1; then
+  ok "assert_panel.sh allows single_claude with no external CLIs"
+else bad "assert_panel.sh single_claude should not need external CLIs"; fi
 # Recursion guard: a panelist process (FUSION_PANEL_CHILD=1) must be refused with exit 14 everywhere.
-FUSION_PANEL_CHILD=1 "$sh_bin" "$root/scripts/assert_panel.sh" --mode single_opus >/dev/null 2>&1
+FUSION_PANEL_CHILD=1 "$sh_bin" "$root/scripts/assert_panel.sh" --mode single_claude >/dev/null 2>&1
 [ $? -eq 14 ] && ok "assert_panel.sh blocks recursive invocation (exit 14)" || bad "assert_panel.sh should exit 14 under FUSION_PANEL_CHILD=1"
 FUSION_PANEL_CHILD=1 "$sh_bin" "$root/scripts/assert_triple_panel.sh" >/dev/null 2>&1
 [ $? -eq 14 ] && ok "assert_triple_panel.sh blocks recursive invocation (exit 14)" || bad "assert_triple_panel.sh should exit 14 under FUSION_PANEL_CHILD=1"
 rec_d="$(mktemp -d "${TMPDIR:-/tmp}/pfo_rec.XXXXXX")"; printf 'x\n' > "$rec_d/p.md"; printf 'keep\n' > "$rec_d/manifest.txt"
-FUSION_PANEL_CHILD=1 "$sh_bin" "$root/scripts/run_panel.sh" --mode single_opus "$rec_d/p.md" "$rec_d" >/dev/null 2>&1
+FUSION_PANEL_CHILD=1 "$sh_bin" "$root/scripts/run_panel.sh" --mode single_claude "$rec_d/p.md" "$rec_d" >/dev/null 2>&1
 rec_rc=$?
 if [ "$rec_rc" -eq 14 ] && [ -s "$rec_d/manifest.txt" ]; then
   ok "run_panel.sh blocks recursion BEFORE the stale-clear (exit 14, out_dir untouched)"
 else bad "run_panel.sh recursion guard broken (rc=$rec_rc, manifest kept: $([ -s "$rec_d/manifest.txt" ] && echo yes || echo no))"; fi
 rm -rf "$rec_d"
-if PATH=/nonexistent "$sh_bin" "$root/scripts/assert_panel.sh" --mode opus_gpt_pair >/dev/null 2>&1; then
-  bad "assert_panel.sh opus_gpt_pair should fail without codex"
+if PATH=/nonexistent "$sh_bin" "$root/scripts/assert_panel.sh" --mode claude_gpt_pair >/dev/null 2>&1; then
+  bad "assert_panel.sh claude_gpt_pair should fail without codex"
 else ok "assert_panel.sh fails missing intentional pair dependency"; fi
 ap_tmp="$(mktemp -d "${TMPDIR:-/tmp}/pfo_ap.XXXXXX")"
 cat > "$ap_tmp/codex" <<'EOF'
@@ -363,12 +363,12 @@ EOF
      grep -q '^PROMPT_BYTES=' "$rp_out/manifest.txt" 2>/dev/null; then
     ok "run_panel manifest records timing + byte accounting"
   else bad "run_panel manifest missing timing/byte fields"; fi
-  # Wide panel: premium_wide must realize PREMIUM with TWO Opus panelists (self-consistency seat).
+  # Wide panel: premium_wide must realize PREMIUM with TWO Claude panelists (self-consistency seat).
   PATH="$rp_tmp:/usr/bin:/bin" "$sh_bin" "$root/scripts/run_panel.sh" --mode premium_wide "$rp_prompt" "$rp_out" >/dev/null 2>&1
   rp_rc=$?
   if [ "$rp_rc" -eq 0 ] && grep -q '^REALIZED_PANEL_STATE=PREMIUM' "$rp_out/manifest.txt" 2>/dev/null && \
-     grep -q '^OPUS_PANELISTS=2' "$rp_out/manifest.txt" 2>/dev/null; then
-    ok "run_panel premium_wide -> PREMIUM with OPUS_PANELISTS=2 (wide round)"
+     grep -q '^CLAUDE_PANELISTS=2' "$rp_out/manifest.txt" 2>/dev/null; then
+    ok "run_panel premium_wide -> PREMIUM with CLAUDE_PANELISTS=2 (wide round)"
   else bad "run_panel premium_wide broken (rc=$rp_rc)"; fi
   # Runtime degrade: codex fails mid-run -> honest manifest + exit 13 without FUSION_ALLOW_DEGRADED.
   cat > "$rp_tmp/codex" <<'EOF'
@@ -379,7 +379,7 @@ EOF
   chmod +x "$rp_tmp/codex"
   PATH="$rp_tmp:/usr/bin:/bin" "$sh_bin" "$root/scripts/run_panel.sh" --mode premium_triple "$rp_prompt" "$rp_out" >/dev/null 2>&1
   rp_rc=$?
-  if [ "$rp_rc" -eq 13 ] && grep -q '^REALIZED_PANEL_STATE=DEGRADED_OPUS_GEMINI' "$rp_out/manifest.txt" 2>/dev/null; then
+  if [ "$rp_rc" -eq 13 ] && grep -q '^REALIZED_PANEL_STATE=DEGRADED_CLAUDE_GEMINI' "$rp_out/manifest.txt" 2>/dev/null; then
     ok "run_panel runtime failure -> exit 13 + honest DEGRADED manifest (no silent degrade)"
   else bad "run_panel runtime-degrade gate broken (rc=$rp_rc, want 13)"; fi
   PATH="$rp_tmp:/usr/bin:/bin" FUSION_ALLOW_DEGRADED=1 "$sh_bin" "$root/scripts/run_panel.sh" --mode premium_triple "$rp_prompt" "$rp_out" >/dev/null 2>&1
@@ -397,7 +397,7 @@ EOF
   chmod +x "$rp_tmp/codex"
   PATH="$rp_tmp:/usr/bin:/bin" "$sh_bin" "$root/scripts/run_panel.sh" --mode premium_triple "$rp_prompt" "$rp_out" >/dev/null 2>&1
   rp_rc=$?
-  if [ "$rp_rc" -eq 13 ] && grep -q '^REALIZED_PANEL_STATE=DEGRADED_OPUS_GEMINI' "$rp_out/manifest.txt" 2>/dev/null; then
+  if [ "$rp_rc" -eq 13 ] && grep -q '^REALIZED_PANEL_STATE=DEGRADED_CLAUDE_GEMINI' "$rp_out/manifest.txt" 2>/dev/null; then
     ok "run_panel treats a tiny error-banner output as a FAILED panelist (plausibility floor)"
   else bad "run_panel plausibility floor broken (rc=$rp_rc, want 13)"; fi
   rm -rf "$rp_tmp"
@@ -435,12 +435,12 @@ exit 1
 EOF
   chmod +x "$sh_tmp/codex" "$sh_tmp/agy"
   sh_out="$sh_tmp/out"; sh_prompt="$sh_tmp/prompt.md"; printf 'shim smoke question\n' > "$sh_prompt"
-  # Shim parity: healthy fakes → exit 0, v2 realized-state PREMIUM + OPUS_PANELISTS=1.
+  # Shim parity: healthy fakes → exit 0, v2 realized-state PREMIUM + CLAUDE_PANELISTS=1.
   PATH="$sh_tmp:/usr/bin:/bin" "$sh_bin" "$root/scripts/run_triple_fusion.sh" "$sh_prompt" "$sh_out" >/dev/null 2>&1
   sh_rc=$?
   if [ "$sh_rc" -eq 0 ] && grep -q '^REALIZED_PANEL_STATE=PREMIUM' "$sh_out/manifest.txt" 2>/dev/null && \
-     grep -q '^OPUS_PANELISTS=1' "$sh_out/manifest.txt" 2>/dev/null; then
-    ok "run_triple_fusion shim -> exit 0, REALIZED_PANEL_STATE=PREMIUM, OPUS_PANELISTS=1"
+     grep -q '^CLAUDE_PANELISTS=1' "$sh_out/manifest.txt" 2>/dev/null; then
+    ok "run_triple_fusion shim -> exit 0, REALIZED_PANEL_STATE=PREMIUM, CLAUDE_PANELISTS=1"
   else bad "run_triple_fusion shim parity broken (rc=$sh_rc)"; fi
   # Shim degrade parity: failing codex → exit 13 without override; exit 0 with override.
   cat > "$sh_tmp/codex" <<'EOF'
@@ -461,7 +461,7 @@ EOF
   if PATH=/nonexistent "$sh_bin" "$root/scripts/assert_triple_panel.sh" >/dev/null 2>&1; then
     bad "assert_triple_panel wrapper should fail with no CLIs"
   else ok "assert_triple_panel wrapper still exits nonzero with no CLIs"; fi
-  # One CLI present (codex only) + override → DEGRADED_OPUS_GPT5 style state + DEGRADED=1.
+  # One CLI present (codex only) + override → DEGRADED_CLAUDE_GPT style state + DEGRADED=1.
   rm -f "$sh_tmp/agy"
   atp="$(FUSION_ALLOW_DEGRADED=1 PATH="$sh_tmp:/usr/bin:/bin" "$sh_bin" "$root/scripts/assert_triple_panel.sh" 2>/dev/null)"; atp_rc=$?
   if [ "$atp_rc" -eq 0 ] && echo "$atp" | grep -q '^PANEL_STATE=' && echo "$atp" | grep -q '^DEGRADED=1'; then
@@ -759,12 +759,21 @@ if [ "$n_skill" -gt 0 ] && [ "$n_skill" -eq "$n_remind" ]; then
 else
   bad "invariant drift: SKILL.md=$n_skill fusion-remind.md=$n_remind"
 fi
-# 3. Retired-model guard: the previous GPT panelist label must not creep back via copy-paste.
-#    (The pattern is spelled so this file's own source never matches itself.)
+# 3. Retired-model guard: previous panelist labels must not creep back via copy-paste.
+#    (Patterns are spelled so this file's own source never matches itself.)
 if grep -rqiE "gpt-?5[.]5" "$root" --exclude-dir=.git --exclude-dir=.fusion --exclude-dir=__pycache__ 2>/dev/null; then
   bad "retired GPT panelist label found — finish the rename: $(grep -rliE "gpt-?5[.]5" "$root" --exclude-dir=.git --exclude-dir=.fusion 2>/dev/null | head -3 | tr '\n' ' ')"
 else
   ok "no retired GPT panelist labels remain"
+fi
+#    Claude seat version slug: build the pattern without embedding the banned token as a contiguous
+#    substring in this file (so the tree-wide 'op'+'us' grep stays clean, and so the guard never
+#    self-matches). Adjacent single-quoted fragments concatenate at runtime.
+_retired_claude_seat="$(printf '%s4[.]8' 'op''us')"
+if grep -rqiE "$_retired_claude_seat" "$root" --exclude-dir=.git --exclude-dir=.fusion --exclude-dir=__pycache__ 2>/dev/null; then
+  bad "retired Claude seat version label found — finish the rename: $(grep -rliE "$_retired_claude_seat" "$root" --exclude-dir=.git --exclude-dir=.fusion 2>/dev/null | head -3 | tr '\n' ' ')"
+else
+  ok "no retired Claude seat version labels remain"
 fi
 # 4. Path rule: command files must never invoke scripts by bare repo-relative path — always <skill-root>.
 if grep -qE '(bash|python3) scripts/' "$root"/commands/*.md 2>/dev/null; then

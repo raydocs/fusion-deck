@@ -53,7 +53,7 @@ surface it; don't dispatch onto a broken base.
 
 ## The judge reviews every worktree diff before merge
 
-A worktree's branch is **not trusted until reviewed.** Before merging, the judge (Opus 4.8) reads each
+A worktree's branch is **not trusted until reviewed.** Before merging, the judge — Claude (the session model) — reads each
 worktree's diff against its base — the same scrutiny a panel answer gets — and only then does the
 orchestrator merge. A subagent never merges its own worktree; isolation without review just hides the
 collision instead of preventing it.

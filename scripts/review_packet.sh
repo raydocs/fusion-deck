@@ -5,7 +5,7 @@
 # Borrowed from superpowers' review-package: scripting the packet (vs. the orchestrator hand-running
 # git log/--stat/diff in its own turn) keeps the diff out of context (~10% fewer tokens on a review)
 # and pins one canonical view. The CLI panelists (codex/Gemini) run sandboxed and cannot Read a path,
-# so the command cats this packet INTO prompt.md; the Opus panelist can be handed the path instead.
+# so the command cats this packet INTO prompt.md; the Claude panelist can be handed the path instead.
 # -U10 gives each hunk enough surrounding context to judge without a second Read.
 #
 # Usage: review_packet.sh <scope> <out_dir>

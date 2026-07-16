@@ -8,7 +8,7 @@ argument-hint: [the bug, failure, or "why does X" question] [--panel to force hy
 Find the **root cause**, not a plausible story. Many real problems are neither a question nor a review —
 they're "why is this actually like this / where does this bug come from." This command gathers **evidence
 before hypotheses**, then — only when hypotheses genuinely conflict — fans the competing theories to the
-panel and lets Opus 4.8 judge which the evidence supports. It ends at a durable root-cause report and
+panel and lets Claude (the session model) judge which the evidence supports. It ends at a durable root-cause report and
 never asserts a cause it didn't ground in `file:line` evidence.
 
 Load `references/investigation-rubric.md` (the phases + report format); if you reach the panel step, also

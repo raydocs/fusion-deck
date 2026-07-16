@@ -15,7 +15,7 @@
 #   Legacy `gemini` requires FUSION_GEMINI_BACKEND=gemini or FUSION_ALLOW_LEGACY_GEMINI=1.
 #
 # Degrades gracefully: if no Gemini backend is available it exits 127 with a clear message so the
-# orchestrator can drop Gemini and downgrade the panel (DEGRADED_OPUS_GPT5) rather than failing the
+# orchestrator can drop Gemini and downgrade the panel (DEGRADED_CLAUDE_GPT) rather than failing the
 # whole run.
 
 set -uo pipefail

@@ -1,6 +1,6 @@
 # Judge rubric
 
-The judge is **Opus 4.8** — the orchestrator, reading every panelist's response *after* all have returned
+The judge is **Claude (the session model)** — the orchestrator, reading every panelist's response *after* all have returned
 independently. The judge does not vote or average. Its job depends on what the task asks for, so **first
 classify the deliverable**, then follow the matching track.
 
@@ -12,7 +12,7 @@ classify the deliverable**, then follow the matching track.
 When mixed ("design and implement X"), the implementation is the deliverable: Track A for the code, fold
 the reasoning in as brief rationale.
 
-Read every panelist response in full first, and **attribute by panelist** ("Opus run A", "GPT-5.6 Sol",
+Read every panelist response in full first, and **attribute by panelist** ("Claude run A", "GPT-5.6 Sol",
 "Gemini 3.1 Pro") so the user can trace any decision. A panelist that failed or was dropped is treated as
 **absent — never as silent agreement.**
 

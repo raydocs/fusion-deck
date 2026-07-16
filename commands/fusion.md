@@ -1,12 +1,12 @@
 ---
-description: Fan a hard question out to the premium model panel (blind, parallel) and have Opus 4.8 judge and write the final answer.
+description: Fan a hard question out to the premium model panel (blind, parallel) and have Claude (the session model) judge and write the final answer.
 argument-hint: [the hard question or task]
 ---
 
 # /fusion
 
 Turn one prompt into a **panel**: the same question goes to several models at once, each answering
-**independently and blind**, then **Opus 4.8 judges** every answer and writes the final one. Use for
+**independently and blind**, then **Claude judges** every answer and writes the final one. Use for
 high-stakes research, design calls, and debugging where being confidently wrong is expensive. For quick
 or low-stakes questions, answer directly — don't pay for a panel.
 
@@ -41,22 +41,22 @@ out=$(mktemp -d "${TMPDIR:-/tmp}/fusion.XXXXXX")
 bash <skill-root>/scripts/run_triple_fusion.sh "$out/prompt.md" "$out" medium
 ```
 
-In the **same turn** (while that runs), spawn the **Opus 4.8 panelist** yourself via the `Agent`/`Task`
+In the **same turn** (while that runs), spawn the **Claude panelist** yourself via the `Agent`/`Task`
 tool (`subagent_type: general-purpose`) with the *same* prompt — so all three run at once. The script
-cannot spawn Opus, and **only you can judge** (the pipeline can't be reversed). For `OPUS_ONLY`, spawn
-**two** cold Opus subagents.
+cannot spawn Claude, and **only you can judge** (the pipeline can't be reversed). For `CLAUDE_ONLY`, spawn
+**two** cold Claude subagents.
 
-**Checkpoint before ending this turn: BOTH the backgrounded Bash call AND the Opus spawn must have gone out in this same message; if only one did, launch the other immediately and disclose in the audit trail that the panel was not fully concurrent.**
+**Checkpoint before ending this turn: BOTH the backgrounded Bash call AND the Claude spawn must have gone out in this same message; if only one did, launch the other immediately and disclose in the audit trail that the panel was not fully concurrent.**
 
 If `$ARGUMENTS` contains `--wide`, run the **wide panel** instead: launch the CLIs via
-`run_panel.sh --mode premium_wide` and spawn **two** cold Opus panelists (4 answers total). Same cost
+`run_panel.sh --mode premium_wide` and spawn **two** cold Claude panelists (4 answers total). Same cost
 class as ultra's round 1; use when the user wants maximum quality on a single-round question. Check
-`OPUS_PANELISTS` in the manifest — it tells you how many Opus panelists to spawn in every mode. When the background task finishes, read `"$out"/manifest.txt`
+`CLAUDE_PANELISTS` in the manifest — it tells you how many Claude panelists to spawn in every mode. When the background task finishes, read `"$out"/manifest.txt`
 and judge/disclose its **`REALIZED_PANEL_STATE`** (a failed/absent CLI panelist is treated as absent,
 never silent agreement). The script also writes `ledger.env` with `RUN_ID` /
 `RUN_DIR` for the local v2 run ledger. Never paste one panelist's output into another's prompt.
 
-## Step 2 — Judge (Opus 4.8)
+## Step 2 — Judge (Claude)
 
 When every panelist has returned, follow `references/judge-rubric.md`. **Classify the deliverable first:**
 - **Artifact** (code/config/schema) → **Track A**: run each candidate, merge what demonstrably works onto
@@ -71,7 +71,8 @@ panelist that ran code or read a primary source over one reasoning from memory.
 
 Lead with the **final deliverable**, then the audit trail (Track A: what each candidate did when run +
 merge rationale + what you verified; Track B: the five-section analysis). **Disclose the realized
-`PANEL_STATE`** and which panelists participated. If the panel degraded, say so and how to enable PREMIUM.
+`PANEL_STATE`** and which panelists participated. Name the actual Claude model of this session in the
+audit trail (e.g. "Claude seat/judge: <your actual model name>"). If the panel degraded, say so and how to enable PREMIUM.
 
 If `$ARGUMENTS` contains `--export`, also persist the final deliverable to a repo-local file and return
 the path so the next step can consume it by path (see `references/export.md`):

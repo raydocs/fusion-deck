@@ -9,7 +9,7 @@ The MVP is:
 
 1. `/fusion-auto` rule router.
 2. `.fusion/runs` local ledger.
-3. Intentional panel modes (`opus_gpt_pair`, `opus_gemini_pair`, `premium_triple`).
+3. Intentional panel modes (`claude_gpt_pair`, `claude_gemini_pair`, `premium_triple`).
 4. Verifier-first early stop discipline.
 
 Later phases:

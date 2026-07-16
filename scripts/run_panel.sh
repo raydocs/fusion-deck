@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # run_panel.sh - v2 external panel runner for intentional panel modes.
 #
-# This script runs only external CLI panelists. Opus panelists and the judge are
+# This script runs only external CLI panelists. Claude panelists and the judge are
 # still spawned by the orchestrator, preserving the existing fusion-deck boundary.
 
 set -uo pipefail
@@ -34,18 +34,18 @@ if [ $assert_rc -ne 0 ]; then
   exit $assert_rc
 fi
 
-need_codex=false; need_gemini=false; opus_panelists=1; opus_role="panelist+judge"
+need_codex=false; need_gemini=false; claude_panelists=1; claude_role="panelist+judge"
 case "$mode" in
-  single_opus) opus_panelists=1 ;;
-  opus_self_consistency) opus_panelists=2 ;;
-  opus_gpt_pair) need_codex=true ;;
-  opus_gemini_pair) need_gemini=true ;;
-  gpt_gemini_pair_plus_opus_judge) need_codex=true; need_gemini=true; opus_panelists=0; opus_role="judge-only" ;;
+  single_claude) claude_panelists=1 ;;
+  claude_self_consistency) claude_panelists=2 ;;
+  claude_gpt_pair) need_codex=true ;;
+  claude_gemini_pair) need_gemini=true ;;
+  gpt_gemini_pair_plus_claude_judge) need_codex=true; need_gemini=true; claude_panelists=0; claude_role="judge-only" ;;
   premium_triple) need_codex=true; need_gemini=true ;;
-  # WIDE modes: cross-family diversity AND same-model self-consistency in one round. Two cold Opus
-  # runs + GPT + Gemini = 4 panelists; the judge additionally reads Opus-vs-Opus disagreement as a
+  # WIDE modes: cross-family diversity AND same-model self-consistency in one round. Two cold Claude
+  # runs + GPT + Gemini = 4 panelists; the judge additionally reads Claude-vs-Claude disagreement as a
   # confidence signal. This is the max-quality default for ultra's round 1.
-  ultra_two_round|premium_wide) need_codex=true; need_gemini=true; opus_panelists=2 ;;
+  ultra_two_round|premium_wide) need_codex=true; need_gemini=true; claude_panelists=2 ;;
   *) echo "[run_panel] unknown mode: $mode" >&2; exit 2 ;;
 esac
 
@@ -89,23 +89,23 @@ $need_gemini && ! $gemini_ok && absent="$absent gemini3.1pro(rc=$gemini_rc)"
 realized_mode="$mode"
 realized_state="CUSTOM_PANEL"
 case "$mode" in
-  single_opus) realized_state="OPUS_ONLY" ;;
-  opus_self_consistency) realized_state="OPUS_SELF_CONSISTENCY" ;;
-  opus_gpt_pair) $codex_ok && realized_state="OPUS_GPT_PAIR" || { realized_state="DEGRADED_FROM_REQUESTED_PAIR"; realized_mode="single_opus"; } ;;
-  opus_gemini_pair) $gemini_ok && realized_state="OPUS_GEMINI_PAIR" || { realized_state="DEGRADED_FROM_REQUESTED_PAIR"; realized_mode="single_opus"; } ;;
-  gpt_gemini_pair_plus_opus_judge)
-    if $codex_ok && $gemini_ok; then realized_state="GPT_GEMINI_PAIR_PLUS_OPUS_JUDGE"
+  single_claude) realized_state="CLAUDE_ONLY" ;;
+  claude_self_consistency) realized_state="CLAUDE_SELF_CONSISTENCY" ;;
+  claude_gpt_pair) $codex_ok && realized_state="CLAUDE_GPT_PAIR" || { realized_state="DEGRADED_FROM_REQUESTED_PAIR"; realized_mode="single_claude"; } ;;
+  claude_gemini_pair) $gemini_ok && realized_state="CLAUDE_GEMINI_PAIR" || { realized_state="DEGRADED_FROM_REQUESTED_PAIR"; realized_mode="single_claude"; } ;;
+  gpt_gemini_pair_plus_claude_judge)
+    if $codex_ok && $gemini_ok; then realized_state="GPT_GEMINI_PAIR_PLUS_CLAUDE_JUDGE"
     else
-      # With <2 CLI answers there is no external pair for a judge-only Opus to judge — the honest
-      # realized shape is a normal single-Opus run (Opus as panelist+judge), not a judge of one.
-      realized_state="DEGRADED_FROM_REQUESTED_PAIR"; realized_mode="single_opus"
-      opus_panelists=1; opus_role="panelist+judge"
+      # With <2 CLI answers there is no external pair for a judge-only Claude to judge — the honest
+      # realized shape is a normal single-Claude run (Claude as panelist+judge), not a judge of one.
+      realized_state="DEGRADED_FROM_REQUESTED_PAIR"; realized_mode="single_claude"
+      claude_panelists=1; claude_role="panelist+judge"
     fi ;;
   premium_triple|ultra_two_round|premium_wide)
-    if $codex_ok && $gemini_ok; then realized_state="PREMIUM"; elif $codex_ok; then realized_state="DEGRADED_OPUS_GPT5"; elif $gemini_ok; then realized_state="DEGRADED_OPUS_GEMINI"; else realized_state="OPUS_ONLY"; fi
-    # OPUS_ONLY is defined (SKILL.md / panel-modes) as TWO cold Opus runs — keep the manifest
+    if $codex_ok && $gemini_ok; then realized_state="PREMIUM"; elif $codex_ok; then realized_state="DEGRADED_CLAUDE_GPT"; elif $gemini_ok; then realized_state="DEGRADED_CLAUDE_GEMINI"; else realized_state="CLAUDE_ONLY"; fi
+    # CLAUDE_ONLY is defined (SKILL.md / panel-modes) as TWO cold Claude runs — keep the manifest
     # consistent with that definition so the orchestrator spawns the right number of panelists.
-    [ "$realized_state" = "OPUS_ONLY" ] && opus_panelists=2 ;;
+    [ "$realized_state" = "CLAUDE_ONLY" ] && claude_panelists=2 ;;
 esac
 
 # Write the manifest to a temp file and rename it into place ONLY when complete (ledger lines
@@ -117,8 +117,8 @@ manifest_tmp="$manifest.tmp"
   echo "REALIZED_PANEL_MODE=$realized_mode"
   echo "REALIZED_PANEL_STATE=$realized_state"
   echo "CLI_PARTICIPANTS=${cli_participants:-none}"
-  echo "OPUS_PANELISTS=$opus_panelists"
-  echo "OPUS_ROLE=$opus_role"
+  echo "CLAUDE_PANELISTS=$claude_panelists"
+  echo "CLAUDE_ROLE=$claude_role"
   echo "ABSENT=${absent:-none}"
   echo "TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   echo "PROMPT_FILE=$prompt_file"
@@ -135,7 +135,7 @@ manifest_tmp="$manifest.tmp"
   echo "GEMINI_OUT=$gemini_out GEMINI_RC=$gemini_rc"
   echo "CODEX_SECONDS=$codex_secs CODEX_OUT_BYTES=$codex_bytes"
   echo "GEMINI_SECONDS=$gemini_secs GEMINI_OUT_BYTES=$gemini_bytes"
-  echo "# NOTE: Opus panelists + judge are added by the orchestrator, not this script."
+  echo "# NOTE: Claude panelists + judge are added by the orchestrator, not this script."
 } > "$manifest_tmp"
 
 task_summary="$(tr '\n' ' ' < "$prompt_file" | cut -c1-180)"
@@ -151,7 +151,7 @@ rm -f "$out_dir/.codex_end" "$out_dir/.gemini_end"
 echo "[run_panel] REQUESTED=$mode REALIZED=$realized_state codex_rc=$codex_rc gemini_rc=$gemini_rc"
 echo "[run_panel] CLI participants: ${cli_participants:-none}${absent:+ ; absent:$absent}"
 echo "[run_panel] manifest -> $manifest"
-echo "[run_panel] NEXT: spawn required Opus panelist(s), then judge per references/judge-rubric.md."
+echo "[run_panel] NEXT: spawn required Claude panelist(s), then judge per references/judge-rubric.md."
 
 if $need_codex && [ "$codex_rc" != "skipped" ] && [ "$codex_rc" != 0 ] && \
    $need_gemini && [ "$gemini_rc" != "skipped" ] && [ "$gemini_rc" != 0 ]; then

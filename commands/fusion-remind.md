@@ -36,7 +36,7 @@ For a quick factual question, just answer — don't route a trivial ask into a p
 ## Invariants that are easy to let slip
 
 1. **Never fake premium.** Disclose the real `PANEL_STATE`; degrade only explicitly (`FUSION_ALLOW_DEGRADED=1`); missing panelist = **absent**, never agreement.
-2. **Blind panel.** Panelists never see each other's work; only the judge sees all answers, after every panelist returns; **Opus 4.8 always judges.**
+2. **Blind panel.** Panelists never see each other's work; only the judge sees all answers, after every panelist returns; **Claude (the session model) always judges.**
 3. **Orchestrator never implements.** Read only to verify; all code changes happen inside Task subagents; one level of fan-out.
 4. **Verify, then dispatch fresh.** Probe each Done-when with a *discriminating* check (`references/probe-quality.md`) before the next; never proceed with a gap.
 5. **v2 routes, it does not guess.** `/fusion-auto` chooses a workflow only, ledgers, verifies, escalates by policy — it does not replace `/fusion`.
