@@ -2,25 +2,27 @@
 # assert_panel.sh - v2 panel-mode gate.
 #
 # Intentional pair modes are not "degraded"; they are valid requested modes.
+# On every exit-0 this script also prints PANEL_STATE= (composition disclosure)
+# so callers can branch and disclose the honest panel shape. Under explicit
+# FUSION_ALLOW_DEGRADED=1 it prints both DEGRADED_FROM_REQUESTED=1 and DEGRADED=1.
 
 set -uo pipefail
 
 # Recursion guard (mirrors OpenRouter's fusion-depth header / imladris max_depth): a panelist process
 # must never convene its own panel — that breaks the blindness invariant and can loop.
-if [ "${FUSION_PANEL_CHILD:-0}" = "1" ]; then
-  echo "[assert_panel] recursive fusion invocation blocked: this process is already a panelist (FUSION_PANEL_CHILD=1)." >&2
-  echo "[assert_panel] panelists answer directly; only the outer orchestrator convenes panels." >&2
-  exit 14
-fi
-
-here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Resolve script dir with bash builtins only (no external dirname) so PATH=/nonexistent probes work.
+_self="${BASH_SOURCE[0]}"
+_dir="${_self%/*}"
+[ "$_dir" = "$_self" ] && _dir="."
+here="$(cd "$_dir" && pwd)"
 . "$here/gemini_backend.sh"
+fusion_guard_recursion "assert_panel"
 
 mode="premium_triple"
 case "${1:-}" in
   --mode) mode="${2:-}"; shift 2 ;;
   -h|--help)
-    sed -n '2,4p' "$0"
+    sed -n '2,6p' "$0"
     echo "usage: assert_panel.sh --mode <single_opus|opus_self_consistency|opus_gpt_pair|opus_gemini_pair|gpt_gemini_pair_plus_opus_judge|premium_triple|premium_wide|ultra_two_round>"
     exit 2 ;;
 esac
@@ -38,6 +40,27 @@ case "$mode" in
   *) echo "[assert_panel] unknown panel mode: $mode" >&2; exit 2 ;;
 esac
 
+# mode → PANEL_STATE when all required CLIs are present (composition disclosure).
+# Single/pair intentional modes map to the closest honest triple-state name.
+panel_state_for_mode() {
+  case "$mode" in
+    single_opus|opus_self_consistency) echo "OPUS_ONLY" ;;
+    opus_gpt_pair)                     echo "DEGRADED_OPUS_GPT5" ;;
+    opus_gemini_pair)                  echo "DEGRADED_OPUS_GEMINI" ;;
+    gpt_gemini_pair_plus_opus_judge|premium_triple|premium_wide|ultra_two_round) echo "PREMIUM" ;;
+    *) echo "CUSTOM_PANEL" ;;
+  esac
+}
+
+# Availability → PANEL_STATE when the requested mode is missing CLIs (honest degrade).
+panel_state_for_availability() {
+  if   $codex_ok && $gemini_ok; then echo "PREMIUM"
+  elif $codex_ok;               then echo "DEGRADED_OPUS_GPT5"
+  elif $gemini_ok;              then echo "DEGRADED_OPUS_GEMINI"
+  else                             echo "OPUS_ONLY"
+  fi
+}
+
 missing=""
 $need_codex && ! $codex_ok && missing="${missing}codex "
 $need_gemini && ! $gemini_ok && missing="${missing}gemini-backend "
@@ -46,6 +69,7 @@ missing="${missing% }"
 if [ -z "$missing" ]; then
   echo "PANEL_MODE=$mode"
   echo "PANEL_AVAILABLE=1"
+  echo "PANEL_STATE=$(panel_state_for_mode)"
   echo "CODEX_AVAILABLE=$codex_ok"
   echo "GEMINI_AVAILABLE=$gemini_ok"
   echo "GEMINI_BACKEND=${FUSION_GEMINI_BACKEND_RESOLVED:-none}"
@@ -53,10 +77,21 @@ if [ -z "$missing" ]; then
 fi
 
 if [ "${FUSION_ALLOW_DEGRADED:-0}" = "1" ]; then
+  state="$(panel_state_for_availability)"
+  {
+    echo "############################################################"
+    echo "# DEGRADED PANEL (FUSION_ALLOW_DEGRADED=1) — NOT PREMIUM    #"
+    echo "# missing: ${missing:-none}"
+    echo "# proceeding with: $state"
+    echo "# The final answer MUST disclose this is a degraded panel.  #"
+    echo "############################################################"
+  } >&2
   echo "PANEL_MODE=$mode"
   echo "PANEL_AVAILABLE=0"
   echo "DEGRADED_FROM_REQUESTED=1"
+  echo "DEGRADED=1"
   echo "MISSING=$missing"
+  echo "PANEL_STATE=$state"
   echo "CODEX_AVAILABLE=$codex_ok"
   echo "GEMINI_AVAILABLE=$gemini_ok"
   echo "GEMINI_BACKEND=${FUSION_GEMINI_BACKEND_RESOLVED:-none}"
@@ -65,9 +100,12 @@ fi
 
 {
   echo "[assert_panel] requested panel mode '$mode' is missing: $missing"
-  $need_codex && ! $codex_ok && echo "  - codex: install/verify codex --version"
-  $need_gemini && ! $gemini_ok && echo "  - Gemini backend: install/verify agy --version"
-  echo "  To proceed knowingly with a smaller realized mode: FUSION_ALLOW_DEGRADED=1"
+  echo "  Premium fusion needs BOTH external CLIs (when the mode requires them):"
+  $need_codex && ! $codex_ok && echo "    - codex  (GPT-5.6 Sol):        install from https://developers.openai.com/codex , then verify 'codex --version'"
+  $need_gemini && ! $gemini_ok && echo "    - agy    (Gemini 3.1 Pro): install from https://antigravity.google/docs/cli-install , then verify 'agy --version'"
+  $need_gemini && ! $gemini_ok && echo "      Legacy gemini is opt-in only: FUSION_GEMINI_BACKEND=gemini or FUSION_ALLOW_LEGACY_GEMINI=1"
+  echo "  To KNOWINGLY proceed with a smaller (degraded) panel, re-run with: FUSION_ALLOW_DEGRADED=1"
+  echo "  Never present a degraded panel as 'premium' — disclose the real PANEL_STATE in the answer."
 } >&2
 
 if $need_codex && ! $codex_ok && $need_gemini && ! $gemini_ok; then exit 12

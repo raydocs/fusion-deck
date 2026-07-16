@@ -26,6 +26,9 @@
 
 set -uo pipefail
 
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$here/gemini_backend.sh"
+
 if [ "$#" -eq 0 ] || [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
   sed -n '2,30p' "$0"
   echo
@@ -33,25 +36,15 @@ if [ "$#" -eq 0 ] || [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
   exit 2
 fi
 
-# Bound any external probe so a hung tool can never wedge the run. Portable: timeout/gtimeout if present,
-# else a bash watchdog (macOS ships no GNU `timeout`). Mirrors detect_panel.sh.
-_bounded() {
-  if command -v timeout  >/dev/null 2>&1; then timeout  5 "$@"; return $?; fi
-  if command -v gtimeout >/dev/null 2>&1; then gtimeout 5 "$@"; return $?; fi
-  # TERM first (KILL only as a follow-up), and reap the watchdog's own sleep so no orphan outlives us.
-  "$@" & _bp=$!; ( sleep 5; kill "$_bp" 2>/dev/null; sleep 5; kill -9 "$_bp" 2>/dev/null ) & _bw=$!
-  wait "$_bp" 2>/dev/null; _brc=$?
-  pkill -P "$_bw" 2>/dev/null; kill "$_bw" 2>/dev/null; wait "$_bw" 2>/dev/null; return "$_brc"
-}
-
 # A tool counts as available only if it's on PATH AND actually runs — presence != working.
+# Bounded via shared fusion_bounded (timeout/gtimeout or bash watchdog).
 ts_py_ok=false; ctags_ok=false
 if command -v python3 >/dev/null 2>&1; then
-  _bounded python3 -c 'import tree_sitter_languages' >/dev/null 2>&1 && ts_py_ok=true
+  fusion_bounded python3 -c 'import tree_sitter_languages' >/dev/null 2>&1 && ts_py_ok=true
 fi
 # `ctags --version` prints "Universal Ctags" or "Exuberant Ctags"; both can emit signatures we use.
 if command -v ctags >/dev/null 2>&1; then
-  _bounded ctags --version >/dev/null 2>&1 && ctags_ok=true
+  fusion_bounded ctags --version >/dev/null 2>&1 && ctags_ok=true
 fi
 
 # Only python `tree_sitter_languages` actually parses (emit_treesitter routes through it). A bare
@@ -135,7 +128,7 @@ emit_ctags() {
   grep -nE '^[[:space:]]*(import |from |#include |require\(|use |using )' "$f" 2>/dev/null \
     | sed 's/^/  /' || true
   # ctags -x gives a human cross-ref: "<name> <kind> <line> <file> <source-line>". Keep def-like kinds.
-  _bounded ctags -x --c-kinds=+p "$f" 2>/dev/null \
+  fusion_bounded ctags -x --c-kinds=+p "$f" 2>/dev/null \
     | awk '$2 ~ /^(function|class|method|member|struct|interface|type|typedef|enum|trait|module|namespace|prototype|subroutine|func)$/ {
              kind=$2; line=$3; $1=""; $2=""; $3=""; $4="";
              sub(/^[ \t]+/,""); printf "  %s [%s:%s]\n", $0, kind, line }' \
@@ -151,7 +144,7 @@ emit_ctags() {
 # and say so on stderr; the global CODEMAP_STATE still reflects the requested tier only if it really ran.
 emit_treesitter() {
   local f="$1"
-  if $ts_py_ok && _bounded python3 "$_TS_HELPER" "$f"; then
+  if $ts_py_ok && fusion_bounded python3 "$_TS_HELPER" "$f"; then
     ts_emitted=$((ts_emitted + 1)); return 0
   fi
   echo "codemap: tree-sitter parse failed for '$f' — falling back to regex for this file" >&2

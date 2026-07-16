@@ -49,13 +49,7 @@ fi
 
 # Prompt-size guard: an oversized packet is a curation bug (use /fusion-context), not something to
 # silently ship to a paid model. FUSION_MAX_PROMPT_BYTES=0 disables.
-max_prompt_bytes="${FUSION_MAX_PROMPT_BYTES:-400000}"
-prompt_bytes="$(wc -c < "$prompt_file" | tr -d ' ')"
-if [ "$max_prompt_bytes" -gt 0 ] 2>/dev/null && [ "$prompt_bytes" -gt "$max_prompt_bytes" ]; then
-  echo "[run_codex.sh] prompt is ${prompt_bytes} bytes > FUSION_MAX_PROMPT_BYTES=${max_prompt_bytes}." >&2
-  echo "[run_codex.sh] curate a smaller packet (/fusion-context) or raise/disable the cap explicitly." >&2
-  exit 2
-fi
+fusion_check_prompt_bytes "run_codex.sh" "$prompt_file" || exit 2
 
 # Injection surface: panelist prompts can embed UNTRUSTED content (a diff under review). With
 # FUSION_NO_WEB=1 the panelist gets a read-only sandbox and NO web tool, so injected instructions
@@ -100,15 +94,13 @@ if [ $status -eq 124 ] || [ $status -eq 143 ]; then
 fi
 # Plausibility floor: an "answer" of a few bytes is an error banner, not a panel answer. Counting it
 # as a healthy panelist would silently fake the panel. FUSION_MIN_OUTPUT_BYTES=0 disables.
-min_out_bytes="${FUSION_MIN_OUTPUT_BYTES:-200}"
-out_bytes=0; [ -f "$output_file" ] && out_bytes="$(wc -c < "$output_file" | tr -d ' ')"
 if [ $status -ne 0 ] || [ ! -s "$output_file" ]; then
   echo "[run_codex.sh] codex exited $status (or wrote no output); tail of log:" >&2
   tail -20 "$scratch/stream.log" >&2
   exit 1
 fi
-if [ "$min_out_bytes" -gt 0 ] 2>/dev/null && [ "$out_bytes" -lt "$min_out_bytes" ]; then
-  echo "[run_codex.sh] output is only ${out_bytes} bytes (< FUSION_MIN_OUTPUT_BYTES=${min_out_bytes}) — treating as failed; tail of log:" >&2
+if ! fusion_check_min_output "run_codex.sh" "$output_file"; then
+  # Extra call-site tail (shared floor message already printed by fusion_check_min_output).
   tail -20 "$scratch/stream.log" >&2
   exit 1
 fi

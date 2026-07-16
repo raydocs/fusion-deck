@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
-# Shared Gemini-panel backend detection.
+# gemini_backend.sh — shared runtime library for fusion panel scripts.
 #
-# Default policy:
+# Provides: Gemini backend detection, bounded CLI probes, and shared guards
+# (recursion, prompt-size, min-output) used by runners and panel gates.
+#
+# Default Gemini backend policy:
 #   FUSION_GEMINI_BACKEND=auto prefers Antigravity CLI (`agy`).
 #   Legacy `gemini` is used only when explicitly requested, because consumer
 #   Gemini CLI auth stopped serving requests after 2026-06-18.
@@ -31,6 +34,48 @@ fusion_bounded() {
 
 fusion_cli_available() {
   command -v "$1" >/dev/null 2>&1 && fusion_bounded "$1" --version >/dev/null 2>&1
+}
+
+# Recursion guard: a panelist process must never convene its own panel (blindness invariant + loop risk).
+# Call BEFORE any side effect (stale-clear, mkdir, etc.). Exits 14 when FUSION_PANEL_CHILD=1.
+fusion_guard_recursion() {
+  _fgr_tag="$1"
+  if [ "${FUSION_PANEL_CHILD:-0}" = "1" ]; then
+    echo "[$_fgr_tag] recursive fusion invocation blocked: this process is already a panelist (FUSION_PANEL_CHILD=1)." >&2
+    echo "[$_fgr_tag] panelists answer directly; only the outer orchestrator convenes panels." >&2
+    exit 14
+  fi
+}
+
+# Prompt-size guard: oversized packets are curation bugs. FUSION_MAX_PROMPT_BYTES=0 disables.
+# Returns 2 when over cap (caller: fusion_check_prompt_bytes TAG FILE || exit 2).
+fusion_check_prompt_bytes() {
+  _fcp_tag="$1"
+  _fcp_file="$2"
+  _fcp_max="${FUSION_MAX_PROMPT_BYTES:-400000}"
+  _fcp_bytes="$(wc -c < "$_fcp_file" | tr -d ' ')"
+  if [ "$_fcp_max" -gt 0 ] 2>/dev/null && [ "$_fcp_bytes" -gt "$_fcp_max" ]; then
+    echo "[$_fcp_tag] prompt is ${_fcp_bytes} bytes > FUSION_MAX_PROMPT_BYTES=${_fcp_max}." >&2
+    echo "[$_fcp_tag] curate a smaller packet (/fusion-context) or raise/disable the cap explicitly." >&2
+    return 2
+  fi
+  return 0
+}
+
+# Plausibility floor: a few-byte "answer" is an error banner, not a panel answer.
+# FUSION_MIN_OUTPUT_BYTES=0 disables. Returns 1 when under floor.
+# Callers that also want a log tail (run_codex) print/tail after a nonzero return.
+fusion_check_min_output() {
+  _fcm_tag="$1"
+  _fcm_file="$2"
+  _fcm_min="${FUSION_MIN_OUTPUT_BYTES:-200}"
+  _fcm_bytes=0
+  [ -f "$_fcm_file" ] && _fcm_bytes="$(wc -c < "$_fcm_file" | tr -d ' ')"
+  if [ "$_fcm_min" -gt 0 ] 2>/dev/null && [ "$_fcm_bytes" -lt "$_fcm_min" ]; then
+    echo "[$_fcm_tag] output is only ${_fcm_bytes} bytes (< FUSION_MIN_OUTPUT_BYTES=${_fcm_min}) — treating as failed." >&2
+    return 1
+  fi
+  return 0
 }
 
 fusion_detect_gemini_backend() {

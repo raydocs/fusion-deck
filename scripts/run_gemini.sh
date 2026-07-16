@@ -42,12 +42,7 @@ if [ "$FUSION_GEMINI_BACKEND_RESOLVED" = "antigravity" ]; then
 fi
 
 # Prompt-size guard (same knob as run_codex.sh): oversized packets are curation bugs.
-max_prompt_bytes="${FUSION_MAX_PROMPT_BYTES:-400000}"
-prompt_bytes="$(wc -c < "$prompt_file" | tr -d ' ')"
-if [ "$max_prompt_bytes" -gt 0 ] 2>/dev/null && [ "$prompt_bytes" -gt "$max_prompt_bytes" ]; then
-  echo "[run_gemini.sh] prompt is ${prompt_bytes} bytes > FUSION_MAX_PROMPT_BYTES=${max_prompt_bytes}." >&2
-  exit 2
-fi
+fusion_check_prompt_bytes "run_gemini.sh" "$prompt_file" || exit 2
 
 timeout_secs="${FUSION_PANEL_TIMEOUT:-600}"
 gemini_model="${FUSION_GEMINI_MODEL:-gemini-3.1-pro-preview}"
@@ -79,10 +74,5 @@ if [ $status -ne 0 ] || [ ! -s "$output_file" ]; then
   exit 1
 fi
 # Plausibility floor — a few-byte "answer" is an error banner, not a panel answer.
-min_out_bytes="${FUSION_MIN_OUTPUT_BYTES:-200}"
-out_bytes="$(wc -c < "$out_abs" | tr -d ' ')"
-if [ "$min_out_bytes" -gt 0 ] 2>/dev/null && [ "$out_bytes" -lt "$min_out_bytes" ]; then
-  echo "[run_gemini.sh] output is only ${out_bytes} bytes (< FUSION_MIN_OUTPUT_BYTES=${min_out_bytes}) — treating as failed." >&2
-  exit 1
-fi
+fusion_check_min_output "run_gemini.sh" "$out_abs" || exit 1
 echo "[run_gemini.sh] ok -> $output_file (MODEL=$gemini_model BACKEND=legacy-gemini)"

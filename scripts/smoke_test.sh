@@ -403,6 +403,73 @@ EOF
   rm -rf "$rp_tmp"
 fi
 
+echo "-- triple runner shims (compat over v2 run_panel / assert_panel) --"
+# run_triple_fusion.sh and assert_triple_panel.sh are thin shims over the v2 path. These checks
+# lock the compat contract (exit codes, v2 manifest fields, degrade override) without paid calls.
+if PATH=/usr/bin:/bin command -v codex >/dev/null 2>&1 || \
+   PATH=/usr/bin:/bin command -v gemini >/dev/null 2>&1 || \
+   PATH=/usr/bin:/bin command -v agy >/dev/null 2>&1; then
+  echo "  note  SKIP triple-shim e2e (a panel CLI resolves under /usr/bin:/bin; can't hide it safely)"
+else
+  sh_tmp="$(mktemp -d "${TMPDIR:-/tmp}/pfo_shim.XXXXXX")"
+  cat > "$sh_tmp/codex" <<'EOF'
+#!/usr/bin/env bash
+if [ "${1:-}" = "--version" ]; then echo "codex fake"; exit 0; fi
+out=""; prev=""
+for a in "$@"; do [ "$prev" = "-o" ] && out="$a"; prev="$a"; done
+cat >/dev/null
+[ -z "$out" ] && exit 1
+{ printf 'CODEX-ANSWER '; head -c 300 /dev/zero | tr '\0' 'x'; echo; } > "$out"
+exit 0
+EOF
+  cat > "$sh_tmp/agy" <<'EOF'
+#!/usr/bin/env bash
+if [ "${1:-}" = "--version" ]; then echo "agy fake"; exit 0; fi
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --print) printf 'AGY-ANSWER '; head -c 300 /dev/zero | tr '\0' 'y'; echo; exit 0 ;;
+  esac
+  shift
+done
+exit 1
+EOF
+  chmod +x "$sh_tmp/codex" "$sh_tmp/agy"
+  sh_out="$sh_tmp/out"; sh_prompt="$sh_tmp/prompt.md"; printf 'shim smoke question\n' > "$sh_prompt"
+  # Shim parity: healthy fakes → exit 0, v2 realized-state PREMIUM + OPUS_PANELISTS=1.
+  PATH="$sh_tmp:/usr/bin:/bin" "$sh_bin" "$root/scripts/run_triple_fusion.sh" "$sh_prompt" "$sh_out" >/dev/null 2>&1
+  sh_rc=$?
+  if [ "$sh_rc" -eq 0 ] && grep -q '^REALIZED_PANEL_STATE=PREMIUM' "$sh_out/manifest.txt" 2>/dev/null && \
+     grep -q '^OPUS_PANELISTS=1' "$sh_out/manifest.txt" 2>/dev/null; then
+    ok "run_triple_fusion shim -> exit 0, REALIZED_PANEL_STATE=PREMIUM, OPUS_PANELISTS=1"
+  else bad "run_triple_fusion shim parity broken (rc=$sh_rc)"; fi
+  # Shim degrade parity: failing codex → exit 13 without override; exit 0 with override.
+  cat > "$sh_tmp/codex" <<'EOF'
+#!/usr/bin/env bash
+if [ "${1:-}" = "--version" ]; then echo "codex fake"; exit 0; fi
+cat >/dev/null; echo "boom: rate limited" >&2; exit 1
+EOF
+  chmod +x "$sh_tmp/codex"
+  PATH="$sh_tmp:/usr/bin:/bin" "$sh_bin" "$root/scripts/run_triple_fusion.sh" "$sh_prompt" "$sh_out" >/dev/null 2>&1
+  sh_rc=$?
+  if [ "$sh_rc" -eq 13 ]; then ok "run_triple_fusion shim runtime failure -> exit 13"
+  else bad "run_triple_fusion shim degrade gate broken (rc=$sh_rc, want 13)"; fi
+  PATH="$sh_tmp:/usr/bin:/bin" FUSION_ALLOW_DEGRADED=1 "$sh_bin" "$root/scripts/run_triple_fusion.sh" "$sh_prompt" "$sh_out" >/dev/null 2>&1
+  sh_rc=$?
+  if [ "$sh_rc" -eq 0 ]; then ok "run_triple_fusion shim accepts runtime degrade with FUSION_ALLOW_DEGRADED=1"
+  else bad "run_triple_fusion shim explicit-degrade path broken (rc=$sh_rc)"; fi
+  # assert_triple_panel wrapper: nonzero with no CLIs; under override with one CLI prints PANEL_STATE= + DEGRADED=1.
+  if PATH=/nonexistent "$sh_bin" "$root/scripts/assert_triple_panel.sh" >/dev/null 2>&1; then
+    bad "assert_triple_panel wrapper should fail with no CLIs"
+  else ok "assert_triple_panel wrapper still exits nonzero with no CLIs"; fi
+  # One CLI present (codex only) + override → DEGRADED_OPUS_GPT5 style state + DEGRADED=1.
+  rm -f "$sh_tmp/agy"
+  atp="$(FUSION_ALLOW_DEGRADED=1 PATH="$sh_tmp:/usr/bin:/bin" "$sh_bin" "$root/scripts/assert_triple_panel.sh" 2>/dev/null)"; atp_rc=$?
+  if [ "$atp_rc" -eq 0 ] && echo "$atp" | grep -q '^PANEL_STATE=' && echo "$atp" | grep -q '^DEGRADED=1'; then
+    ok "assert_triple_panel wrapper under FUSION_ALLOW_DEGRADED=1 prints PANEL_STATE= and DEGRADED=1"
+  else bad "assert_triple_panel wrapper degrade disclosure broken (rc=$atp_rc)"; fi
+  rm -rf "$sh_tmp"
+fi
+
 echo "-- selection_lint .fusionignore gate (S012) --"
 fi_tmp="$(mktemp -d "${TMPDIR:-/tmp}/pfo_fi.XXXXXX")"
 mkdir -p "$fi_tmp/.git" "$fi_tmp/.fusion" "$fi_tmp/build" "$fi_tmp/docs"

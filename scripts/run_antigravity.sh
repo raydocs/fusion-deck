@@ -77,11 +77,6 @@ if [ $status -ne 0 ] || [ ! -s "$output_file" ]; then
   exit 1
 fi
 # Plausibility floor — a few-byte "answer" is an error banner, not a panel answer.
-min_out_bytes="${FUSION_MIN_OUTPUT_BYTES:-200}"
-out_bytes="$(wc -c < "$out_abs" | tr -d ' ')"
-if [ "$min_out_bytes" -gt 0 ] 2>/dev/null && [ "$out_bytes" -lt "$min_out_bytes" ]; then
-  echo "[run_antigravity.sh] output is only ${out_bytes} bytes (< FUSION_MIN_OUTPUT_BYTES=${min_out_bytes}) — treating as failed." >&2
-  exit 1
-fi
+fusion_check_min_output "run_antigravity.sh" "$out_abs" || exit 1
 
 echo "[run_antigravity.sh] ok -> $output_file (MODEL=$antigravity_model BACKEND=antigravity)"

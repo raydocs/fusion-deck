@@ -7,13 +7,14 @@
 set -uo pipefail
 
 # Recursion guard — refuse BEFORE any side effect (the stale-clear below must never run for a child).
-if [ "${FUSION_PANEL_CHILD:-0}" = "1" ]; then
-  echo "[run_panel] recursive fusion invocation blocked: this process is already a panelist (FUSION_PANEL_CHILD=1)." >&2
-  exit 14
-fi
-
-here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Source the shared lib first (defines only; no side effects) so the guard can run immediately.
+# Resolve script dir with bash builtins only (no external dirname) so PATH=/nonexistent probes work.
+_self="${BASH_SOURCE[0]}"
+_dir="${_self%/*}"
+[ "$_dir" = "$_self" ] && _dir="."
+here="$(cd "$_dir" && pwd)"
 . "$here/gemini_backend.sh"
+fusion_guard_recursion "run_panel"
 
 mode="premium_triple"
 if [ "${1:-}" = "--mode" ]; then mode="${2:-}"; shift 2; fi
@@ -27,9 +28,9 @@ rm -f "$out_dir/manifest.txt" "$out_dir/manifest.txt.tmp" "$out_dir/codex_out.md
       "$out_dir/codex.log" "$out_dir/gemini.log" "$out_dir/ledger.env" \
       "$out_dir/.codex_end" "$out_dir/.gemini_end"
 
-assert_out="$(bash "$here/assert_panel.sh" --mode "$mode" 2>/dev/null)"; assert_rc=$?
+assert_out="$("${BASH:-bash}" "$here/assert_panel.sh" --mode "$mode" 2>/dev/null)"; assert_rc=$?
 if [ $assert_rc -ne 0 ]; then
-  bash "$here/assert_panel.sh" --mode "$mode" >/dev/null
+  "${BASH:-bash}" "$here/assert_panel.sh" --mode "$mode" >/dev/null
   exit $assert_rc
 fi
 
