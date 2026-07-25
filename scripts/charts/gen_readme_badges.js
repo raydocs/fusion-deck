@@ -39,10 +39,10 @@ function badge({file, label, value}){
   console.log(`  ${file}  ${W}×${H}`);
 }
 
-badge({file:'badge-version.svg', label:'VERSION',  value:'v2.1'});
+badge({file:'badge-version.svg', label:'VERSION',  value:'v2.2'});
 // The count is a CLAIM. scripts/smoke_test.sh asserts this badge matches its own total and tells you to
 // rerun this generator when it drifts, so a stale front-page number fails the suite rather than shipping.
-badge({file:'badge-smoke.svg',   label:'SMOKE',    value:'287 PASSING'});
+badge({file:'badge-smoke.svg',   label:'SMOKE',    value:'291 PASSING'});
 badge({file:'badge-panel.svg',   label:'PANEL',    value:'CLAUDE + CODEX + GEMINI'});
 badge({file:'badge-deps.svg',    label:'RUNTIME',  value:'BASH + PYTHON3'});
 badge({file:'badge-license.svg', label:'LICENSE',  value:'MIT'});

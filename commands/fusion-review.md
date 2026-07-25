@@ -64,26 +64,19 @@ feedback because it can't see how the changed code is *used*. When the target is
 call-sites:
 
 ```bash
-# names of functions/classes/methods touched by the diff (the identifier AFTER the keyword — never the
-# keyword itself, or you grep the repo for 'def'), then their call-sites, capped per symbol
-syms=$(git diff <range> | grep -E '^\+' \
-  | grep -oE '\b(def|func|function|class|fn|sub|type|interface|struct)[[:space:]]+[A-Za-z_][A-Za-z0-9_]*' \
-  | awk '{print $2}' | sort -u)
-for s in $syms; do git grep -nw -C4 "$s" | head -45; done
+bash <skill-root>/scripts/caller_slices.sh <scope> "$out"   # -> "$out"/callers.md
 ```
 
-Two details carry this step. `-C4` makes these **slices** rather than an index — a bare `git grep -n`
-gives one line per hit, from which no reviewer can judge *how* a symbol is used, and the window is free.
-And **`git grep`, never `grep -r`**: git searches tracked files only, skipping `.git` and gitignored build
-output that `grep -r` reads in full before filtering. Measured 16–25× on ordinary repos and **518×** on one
-with a large `node_modules` (491 s → 0.9 s); this step alone can otherwise dominate the review.
+It takes the symbols the diff **declares**, finds their call-sites in one multi-pattern `git grep`, and
+keeps each hit with ±4 lines of surrounding block, capped per symbol so one hot name cannot eat the
+packet. Read the greppable `CALLER_SLICES=` line: `NO_SYMBOLS` (docs/config/deletion-only — say so in the
+brief) or `EMPTY` (symbols exist but nothing came back — a broken pipeline, exit 4, do not ship it).
+The keyword heuristic only sees **keyword-declared** symbols, so on modifier-led languages (C#, Java,
+Swift, Kotlin) it catches types but not methods — there the repo map's codemap tier is the primary
+caller context, not the fallback.
 
-If `syms` captures nothing (docs/config/deletion-only diffs), state "no new symbols; caller context omitted" in the brief and fall back to `git diff --stat` plus `codemap.sh` of the touched files — never silently ship a context-free packet. The keyword heuristic above only sees **keyword-declared** symbols; in languages where methods are declared by modifier + return type (C#, Java, Swift, Kotlin) it catches types but misses methods, so on those repos treat `codemap.sh` of the touched files as the primary caller-context source, not the fallback.
-
-Bundle the signatures of those callers (codemap tier is enough — `bash <skill-root>/scripts/codemap.sh
-<caller-file>`) alongside the diff, so the review balances the patch against the *unmodified* code that
-depends on it. Frame the brief explicitly as a **code review of a change** (use the literal phrase "code
-review" and name the scope token) so panelists analyze the diff, not the file in the abstract.
+Frame the brief explicitly as a **code review of a change** (use the literal phrase "code review" and name
+the scope token) so panelists analyze the diff, not the file in the abstract.
 
 Give every panelist the **same review brief verbatim** (the packet + the **no-web variant** independent-expert
 instruction from `panel-prompt.md`), asking each for findings as a list of `{severity, location (file:line),

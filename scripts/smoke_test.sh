@@ -610,11 +610,47 @@ done
 grep -q 'model: sonnet' "$root/references/context-discovery.md" \
   && ok "context-discovery.md pins the retrieval subagent to a fast model" \
   || bad "context-discovery.md leaves the discovery subagent unpinned — top-tier model doing grep"
-# Caller context must be SLICES, not an index: a bare `git grep -n` yields one line per hit, from which
-# no reviewer can judge how the symbol is used.
-grep -qE '^for s in \$syms; do +git grep -nw -C[0-9]' "$root/commands/fusion-review.md" \
-  && ok "fusion-review.md caller context carries surrounding lines (slices, not an index)" \
-  || bad "fusion-review.md caller context has no -C window — one line per hit is not reviewable"
+echo "-- caller_slices behaviour --"
+# Functional, not textual: this step has shipped three separate silent-empty bugs, so assert what the
+# script DOES on a real repo rather than what its source looks like.
+cs_repo="$(mktemp -d "${TMPDIR:-/tmp}/pfo_cs.XXXXXX")"
+(
+  cd "$cs_repo" || exit 1
+  git init -q .
+  mkdir -p src
+  # one symbol with MANY call-sites, so the per-symbol cap has something to bite on
+  printf 'def helper():\n    pass\n' > src/lib.py
+  i=1; while [ $i -le 12 ]; do
+    printf 'from lib import helper\n\ndef use%s():\n    return helper()\n' "$i" > "src/use$i.py"
+    i=$((i+1))
+  done
+  git add -A && git -c user.email=a@b -c user.name=a commit -qm init
+  printf 'def helper():\n    pass\n\ndef helper_two():\n    pass\n' > src/lib.py   # declares a new symbol
+) >/dev/null 2>&1
+cs_out="$(mktemp -d "${TMPDIR:-/tmp}/pfo_cso.XXXXXX")"
+cs_status="$( cd "$cs_repo" && bash "$root/scripts/caller_slices.sh" uncommitted "$cs_out" 2>&1 )"
+cs_rc=$?
+printf '%s' "$cs_status" | grep -q '^CALLER_SLICES=' \
+  && ok "caller_slices discloses a greppable CALLER_SLICES= state" \
+  || bad "caller_slices printed no CALLER_SLICES= line"
+# ±context, not one line per hit: a bare index tells a reviewer a symbol is used, not HOW.
+if [ -f "$cs_out/callers.md" ] && grep -qE '^[^:]+-[0-9]+-' "$cs_out/callers.md"; then
+  ok "caller_slices emits context lines around each hit (slices, not an index)"
+else
+  bad "caller_slices produced no context lines — one line per hit is not reviewable"
+fi
+# A diff with no keyword-declared symbols must say so, not write an empty fence.
+( cd "$cs_repo" && git checkout -- src/lib.py && printf 'nothing\n' > notes.txt ) >/dev/null 2>&1
+cs_none="$( cd "$cs_repo" && bash "$root/scripts/caller_slices.sh" uncommitted "$cs_out" 2>&1 )"
+printf '%s' "$cs_none" | grep -q 'CALLER_SLICES=NO_SYMBOLS' \
+  && ok "caller_slices reports NO_SYMBOLS instead of an empty slice set" \
+  || bad "caller_slices did not disclose the no-symbol case"
+rm -rf "$cs_repo" "$cs_out"
+# The symbol list must reach awk through a FILE. BSD awk rejects a -v value containing newlines and then
+# emits nothing while still exiting 0 — a silent empty slice set under a status line claiming N symbols.
+grep -q 'symfile=' "$root/scripts/caller_slices.sh" && ! grep -qE '\-v +syms=' "$root/scripts/caller_slices.sh" \
+  && ok "caller_slices passes symbols by file, not -v (BSD awk rejects newlines in -v)" \
+  || bad "caller_slices passes the symbol list via -v — BSD awk will silently emit nothing"
 
 echo "-- panel workspace isolation --"
 # A CLI seat pointed at a disposable worktree can read the code under review. Three properties make that

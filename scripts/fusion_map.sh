@@ -159,12 +159,22 @@ awk -F'\t' '
 # A path in the index that is GONE from disk is a deletion under review. Without this test its old blob
 # SHA stays a cache HIT, so the map both lists the file and emits signatures for functions that no longer
 # exist — verified: `rm src/b.py` left `src/b.py` in map.md twice with its `deleted_fn` block intact.
-: > "$tmp/src_sha_path"
-while IFS="$(printf '\t')" read -r sha path; do
-  fusion_is_source_path "$path" || continue
-  [ -f "$repo/$path" ] || continue
-  printf '%s\t%s\n' "$sha" "$path" >> "$tmp/src_sha_path"
-done < "$tmp/all_sha_path"
+#
+# One awk pass, not a shell loop. The `while read` form ran ~800 iterations calling a shell function and
+# a `[ -f ]` per line: measured 532 ms of a 978 ms warm build, on bash 3.2 loop overhead alone. Deletions
+# now come from a single `git ls-files -d` rather than one stat per file.
+( cd "$repo" && git ls-files -d ) 2>/dev/null | sort -u > "$tmp/deleted"
+awk -F'\t' -v exts="$FUSION_SOURCE_EXT" -v del="$tmp/deleted" '
+  BEGIN { n = split(exts, a, " "); for (i = 1; i <= n; i++) ok["." a[i]] = 1 }
+  FILENAME == del { gone[$0] = 1; next }
+  {
+    p = $2
+    if (p in gone) next
+    d = p; sub(/^.*\./, ".", d)          # extension, dot included; no dot => unchanged, cannot match
+    if (index(p, ".") == 0 || !(d in ok)) next
+    print
+  }
+' "$tmp/deleted" "$tmp/all_sha_path" > "$tmp/src_sha_path"
 
 n_files=$(wc -l < "$tmp/src_sha_path" | tr -d ' ')
 if [ "$n_files" -eq 0 ]; then
@@ -177,11 +187,16 @@ if [ "$n_files" -eq 0 ]; then
 fi
 
 # ── 2. Split into cache hits and misses ───────────────────────────────────────────────────────────────
-: > "$tmp/miss"; : > "$tmp/hit"
-while IFS="$(printf '\t')" read -r sha path; do
-  if [ -s "$cache/$sha.map" ]; then printf '%s\t%s\n' "$sha" "$path" >> "$tmp/hit"
-  else                              printf '%s\t%s\n' "$sha" "$path" >> "$tmp/miss"; fi
-done < "$tmp/src_sha_path"
+# List the cache ONCE and partition in awk: the per-entry `[ -s ]` loop cost 291 ms of a 978 ms warm
+# build. Keyed on FILENAME, never NR==FNR — the listing is empty on a cold cache, and an empty first
+# file makes NR==FNR true for every record of the second.
+find "$cache" -maxdepth 1 -name '*.map' -size +0 2>/dev/null \
+  | sed 's|.*/||; s|\.map$||' | sort -u > "$tmp/have"
+awk -F'\t' -v have="$tmp/have" -v hit="$tmp/hit" -v miss="$tmp/miss" '
+  FILENAME == have { h[$0] = 1; next }
+  { print > (($1 in h) ? hit : miss) }
+' "$tmp/have" "$tmp/src_sha_path"
+: >> "$tmp/hit"; : >> "$tmp/miss"
 n_hit=$(wc -l < "$tmp/hit" | tr -d ' ')
 n_miss=$(wc -l < "$tmp/miss" | tr -d ' ')
 

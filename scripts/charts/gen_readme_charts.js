@@ -62,12 +62,15 @@ function card({file, title, sub, src, h=352, draw}){
 card({
   file:'perf-phase.svg',
   title:'The mechanical phase, before and after',
-  sub:'one bead = 500 ms saved · hollow = 31dbda2 · ink = now · PanicCamp, 823 tracked files',
+  sub:'one bead = 500 ms saved · hollow = 31dbda2 · ink = v2.2 · PanicCamp, 823 files, 20 symbols',
   src:'DUMBBELL QUEUE · MONO-BASIC · STEP-1 TIMING',
-  h:278,
+  h:250,
   draw(s){
-    const D=[['CALLER SEARCH',8063,300],['MAP BUILD',2258,1174],['REVIEW PACKET',103,56]];
-    const y0=i=>44+i*54,X0=132,X1=366,MAXV=8300,mapX=v=>X0+(v/MAXV)*(X1-X0);
+    // The review-packet step is NOT plotted: it was never touched, and its 89 ms -> 93 ms is measurement
+    // noise. A row drifting rightward would read as a regression and would break this template's premise
+    // that every row moves left. It is stated in the caption instead.
+    const D=[['CALLER SEARCH',8250,101],['MAP BUILD',1727,249]];
+    const y0=i=>52+i*58,X0=132,X1=366,MAXV=8400,mapX=v=>X0+(v/MAXV)*(X1-X0);
     D.forEach(([name,was,now],i)=>{
       const y=y0(i),xa=mapX(was),xb=mapX(now);
       txt(s,{x:122,y:y+3,'font-size':7.5,'font-weight':700,fill:'#6A6963','text-anchor':'end',
@@ -92,11 +95,11 @@ card({
       txt(s,{x:(xb-9).toFixed(1),y:y-8,'font-size':10,'font-weight':800,fill:INK,'text-anchor':'end',
         class:'fade',style:`animation-delay:${.7+i*.08}s`},now.toLocaleString());
     });
-    txt(s,{x:X0,y:190,'font-size':7,'font-weight':600,fill:'#C6C5BF',class:'fade'},'FASTER ←');
-    txt(s,{x:X1,y:190,'font-size':7,'font-weight':600,fill:'#C6C5BF','text-anchor':'end',class:'fade'},'MILLISECONDS');
-    txt(s,{x:200,y:210,'font-size':7,'font-weight':600,fill:'#B0AFA9','text-anchor':'middle',
+    txt(s,{x:X0,y:170,'font-size':7,'font-weight':600,fill:'#C6C5BF',class:'fade'},'FASTER ←');
+    txt(s,{x:X1,y:170,'font-size':7,'font-weight':600,fill:'#C6C5BF','text-anchor':'end',class:'fade'},'MILLISECONDS');
+    txt(s,{x:200,y:186,'font-size':7,'font-weight':600,fill:'#B0AFA9','text-anchor':'middle',
       'letter-spacing':'.1em',class:'fade',style:'animation-delay:1s'},
-      'TOTAL 10,425 MS → 1,530 MS · 6.8× · SAME RUN, SAME SYMBOL SET');
+      'TOTAL 10,066 → 443 MS · 22.7× · REVIEW PACKET UNCHANGED AT ~90 MS, NOT PLOTTED');
   }
 });
 
@@ -188,12 +191,12 @@ card({
 // template: C1 · tick rows. one tick = one defect; dot marks every fifth.
 card({
   file:'defect-origin.svg',
-  title:'Thirty defects, and who caught them',
-  sub:'one tick = one defect · dot marks every fifth · four review passes on this branch',
+  title:'Thirty-five defects, and who caught them',
+  sub:'one tick = one defect · dot marks every fifth · five passes on this branch',
   src:'TICK ROWS · MONO-BASIC · DEFECT LEDGER',
   h:248,
   draw(s){
-    const D=[['PANEL FOUND',16],['SELF-AUDIT',10],['SELF-INFLICTED',4]];
+    const D=[['PANEL FOUND',16],['SELF-INFLICTED',9],['SELF-AUDIT',10]];
     const y0=i=>40+i*46,X0=126,PX=9.5;
     D.forEach(([name,v],i)=>{
       const y=y0(i);
@@ -214,7 +217,7 @@ card({
     });
     txt(s,{x:200,y:196,'font-size':7,'font-weight':600,fill:'#B0AFA9','text-anchor':'middle',
       'letter-spacing':'.1em',class:'fade',style:'animation-delay:.9s'},
-      'SELF-INFLICTED = INTRODUCED WHILE FIXING, THEN FIXED · ALL 30 CLOSED');
+      'SELF-INFLICTED = INTRODUCED WHILE FIXING, CAUGHT BEFORE SHIPPING · ALL 35 CLOSED');
   }
 });
 

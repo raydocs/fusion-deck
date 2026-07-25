@@ -4,8 +4,8 @@
 
 # fusion-deck
 
-<a href="https://github.com/raydocs/fusion-deck/releases/tag/v2.1"><img src="assets/readme/badges/badge-version.svg" alt="Version v2.1" height="22"></a>
-<a href="#development-verification"><img src="assets/readme/badges/badge-smoke.svg" alt="Smoke: 287 passing" height="22"></a>
+<a href="https://github.com/raydocs/fusion-deck/releases/tag/v2.2"><img src="assets/readme/badges/badge-version.svg" alt="Version v2.2" height="22"></a>
+<a href="#development-verification"><img src="assets/readme/badges/badge-smoke.svg" alt="Smoke: 291 passing" height="22"></a>
 <img src="assets/readme/badges/badge-panel.svg" alt="Panel: Claude + Codex + Gemini" height="22">
 <img src="assets/readme/badges/badge-deps.svg" alt="Runtime: bash + python3" height="22">
 <a href="LICENSE"><img src="assets/readme/badges/badge-license.svg" alt="License: MIT" height="22"></a>
@@ -46,7 +46,7 @@ A panel costs roughly 3 model calls and a few minutes; it is priced for decision
 
 ## The context layer, measured
 
-A panel is only as good as what its seats can see. In v2.1 every seat gets the same mechanical repo map, the seats that can be sandboxed get a disposable snapshot of the code under review, and the timeouts stop lying about which knob controls them. All figures below are from this repo's own benchmarks — same run, same symbol set, `31dbda2` against `v2.1`.
+A panel is only as good as what its seats can see. Every seat gets the same mechanical repo map, the seats that can be sandboxed get a disposable snapshot of the code under review, and the timeouts stop lying about which knob controls them. All figures below are from this repo's own benchmarks — same run, same 20-symbol diff, `31dbda2` against `v2.2`.
 
 <table>
 <tr>
@@ -56,9 +56,9 @@ A panel is only as good as what its seats can see. In v2.1 every seat gets the s
 <tr>
 <td colspan="2">
 
-**Where the time went.** Caller search dominated the old mechanical phase — `grep -rnw` read `.git` and every gitignored build tree before filtering, once per symbol. `git grep` skips both. On a repo with a large `node_modules` the same step went from **491 s to 0.9 s**.
+**Where the time went.** Caller search dominated the old mechanical phase, and two things were wrong with it. It used `grep -rnw`, which reads `.git` and every gitignored build tree before filtering — `git grep` skips both, and on a repo with a large `node_modules` that step alone went from **491 s to 0.9 s**. And it spawned one process *per symbol*; a single multi-pattern pass does the same work once, with the per-symbol cap re-applied afterwards so one hot name still cannot eat the packet. Map build fell the same way: two shell `while read` loops over ~1,300 lines cost 823 ms of a 978 ms warm build on bash 3.2 loop overhead alone, and became one `awk` pass each.
 
-**What the context gained.** The baseline map held **zero** C# signatures on a 142-file C# repo: the extension list and the signature pattern both missed modifier-led languages, and the run still exited 0. Prose now contributes a capped heading outline instead of empty blocks, which is the −217.
+**What the context gained.** The baseline map held **zero** C# signatures on a 142-file C# repo: the extension list and the signature pattern both missed modifier-led languages, and the run still exited 0. Prose now contributes a capped heading outline instead of empty blocks, which is the −217. A warm rebuild costs only the files whose content changed, so the map is rebuilt before every fan-out rather than cached and trusted.
 
 </td>
 </tr>
@@ -77,11 +77,13 @@ A panel is only as good as what its seats can see. In v2.1 every seat gets the s
 </tr>
 </table>
 
-<img src="assets/readme/charts/defect-origin.svg" alt="Tick rows: 16 defects found by the panel, 10 by self-audit, 4 self-inflicted during fixing" width="52%" align="right">
+<img src="assets/readme/charts/defect-origin.svg" alt="Tick rows: 16 defects found by the panel, 9 self-inflicted while fixing, 10 found by self-audit" width="52%" align="right">
 
-**And the part worth being honest about.** v2.1 was built by running `/fusion-review` on itself, four passes. The panel caught 16 defects the author missed — including a symlink that exfiltrated files from outside the repo, and a worktree whose `.git` pointer walked a seat back to the live checkout. Self-audit caught 10 more. Four were introduced *while fixing* the others and caught by the suite going red.
+**And the part worth being honest about.** This was built by running `/fusion-review` on itself, pass after pass. The panel caught 16 defects the author missed — including a symlink that exfiltrated files from outside the repo, and a worktree whose `.git` pointer walked a seat back to the live checkout. Self-audit caught 10 more.
 
-That last bar is the argument for the whole tool: a single careful pass is not reliable enough on its own, and this is what the second reader is for.
+Nine were introduced *while fixing* the others, and every one of them was caught by a test going red rather than by re-reading the diff. The optimisation pass alone produced five: an `awk -v` value containing newlines that BSD awk rejects while still exiting 0, a per-symbol cap voided by matching against the file path, and a regex-based rewrite that came out **slower** than the loop it replaced.
+
+That middle bar is the argument for the whole tool. A single careful pass is not reliable enough on its own — not even when the author is being careful on purpose.
 
 <br clear="right">
 
@@ -176,7 +178,7 @@ Cognition/Devin measured that delegation backfires when subtle intent matters �
 ## Development verification
 
 ```bash
-bash scripts/smoke_test.sh                                   # 287 assertions, offline
+bash scripts/smoke_test.sh                                   # 291 assertions, offline
 python3 scripts/route_task.py --check tests/router_cases.yml
 node scripts/charts/gen_readme_charts.js assets/readme/charts # regenerate the README charts
 ```
