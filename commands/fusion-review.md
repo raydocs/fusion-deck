@@ -69,8 +69,10 @@ bash <skill-root>/scripts/caller_slices.sh <scope> "$out"   # -> "$out"/callers.
 
 It takes the symbols the diff **declares**, finds their call-sites in one multi-pattern `git grep`, and
 keeps each hit with ±4 lines of surrounding block, capped per symbol so one hot name cannot eat the
-packet. Read the greppable `CALLER_SLICES=` line: `NO_SYMBOLS` (docs/config/deletion-only — say so in the
-brief) or `EMPTY` (symbols exist but nothing came back — a broken pipeline, exit 4, do not ship it).
+packet. Read the greppable `CALLER_SLICES=` line. `NO_SYMBOLS` (docs/config/deletion-only) is not permission to
+ship a context-free packet: fall back to `git diff --stat` plus `codemap.sh` of the touched files, and say
+in the brief that caller context was omitted. `EMPTY` means symbols exist but nothing came back — a broken
+pipeline, exit 4, do not ship it.
 The keyword heuristic only sees **keyword-declared** symbols, so on modifier-led languages (C#, Java,
 Swift, Kotlin) it catches types but not methods — there the repo map's codemap tier is the primary
 caller context, not the fallback.

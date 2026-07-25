@@ -591,6 +591,22 @@ if command -v zsh >/dev/null 2>&1; then
     bad "fusion_is_source_path matches nothing under zsh — silent empty map for a whole repo"
   fi
 fi
+# fusion_map.sh's awk filter re-implements fusion_is_source_path in a second language, so the two can
+# drift. Assert they agree on a fixture list rather than trusting that they were written to match.
+_ext_probe="$(mktemp "${TMPDIR:-/tmp}/pfo_ext.XXXXXX")"
+printf '%s\n' a.py b.cs c.md d.png e.tar.gz f "g.PY" "dir.d/noext" "h.p?" > "$_ext_probe"
+_sh_yes="$( . "$root/scripts/gemini_backend.sh"
+            while IFS= read -r pth; do fusion_is_source_path "$pth" && printf '%s\n' "$pth"; done < "$_ext_probe" )"
+_awk_yes="$(awk -v exts="$( . "$root/scripts/gemini_backend.sh"; printf '%s' "$FUSION_SOURCE_EXT" )" '
+  BEGIN { n = split(exts, a, " "); for (i = 1; i <= n; i++) ok["." a[i]] = 1 }
+  { p = $0; d = p; sub(/^.*\./, ".", d); if (index(p, ".") && (d in ok)) print }' "$_ext_probe")"
+if [ "$_sh_yes" = "$_awk_yes" ]; then
+  ok "the shell and awk source-extension filters agree on a fixture list"
+else
+  bad "source-extension filters disagree — shell:[$(printf '%s' "$_sh_yes" | tr '\n' ' ')] awk:[$(printf '%s' "$_awk_yes" | tr '\n' ' ')]"
+fi
+rm -f "$_ext_probe"
+
 _fm_ext_pat="$(printf '%s_SOURCE_EXT=' 'FUSION')"
 if [ "$(grep -rl "$_fm_ext_pat" "$root/scripts" | wc -l | tr -d ' ')" -eq 1 ]; then
   ok "fusion_map/codemap share one FUSION_SOURCE_EXT definition"
@@ -681,8 +697,70 @@ cs_new_rc=$?
   && ok "caller_slices: a brand-new symbol does not false-fire the empty guard" \
   || bad "caller_slices: brand-new symbol exited $cs_new_rc — an ordinary diff would stop the review"
 
+# Word-boundary attribution at the EDGES of a line. `index(WORD, "")` returns 1 in awk — the empty
+# string is "found" at position 1 — so an empty neighbour read as a word character and every call-site
+# where the symbol starts or ends the line was silently dropped from the packet.
+( cd "$cs_repo" && git checkout -- src/lib.py \
+    && printf 'edgefn()\n' > src/at_start.py \
+    && printf 'y = edgefn\n' > src/at_end.py \
+    && printf 'z = edgefnX()\n' > src/not_a_match.py \
+    && git add -A && git -c user.email=a@b -c user.name=a commit -qm edges \
+    && printf 'def helper():\n    pass\n\ndef edgefn():\n    pass\n' > src/lib.py ) >/dev/null 2>&1
+( cd "$cs_repo" && bash "$root/scripts/caller_slices.sh" uncommitted "$cs_out" ) >/dev/null 2>&1
+cs_edges=0
+grep -q 'src/at_start.py' "$cs_out/callers.md" 2>/dev/null || cs_edges=1
+grep -q 'src/at_end.py'   "$cs_out/callers.md" 2>/dev/null || cs_edges=1
+[ "$cs_edges" -eq 0 ] \
+  && ok "caller_slices: call-sites at the start and end of a line are kept" \
+  || bad "caller_slices: an edge-of-line call-site was dropped (index(WORD,\"\") returns 1, not 0)"
+grep -q 'edgefnX' "$cs_out/callers.md" 2>/dev/null \
+  && bad "caller_slices: matched a substring (edgefnX) — word boundaries are not being enforced" \
+  || ok "caller_slices: a longer identifier containing the symbol is not matched"
+
+# A hunk belongs to EVERY symbol matched in it. Owning it by one symbol dropped it whole once that
+# owner hit its cap, taking a colder symbol's only call-site with it.
+( cd "$cs_repo" && git checkout -- src/lib.py ) >/dev/null 2>&1
+(
+  cd "$cs_repo" || exit 1
+  i=1; while [ $i -le 6 ]; do printf 'alpha()\n' > "src/h$i.py"; i=$((i+1)); done
+  printf 'alpha()\nbeta()\n' > src/h6.py
+  git add -A && git -c user.email=a@b -c user.name=a commit -qm hot
+  printf 'def helper():\n    pass\n\ndef alpha():\n    pass\n\ndef beta():\n    pass\n' > src/lib.py
+) >/dev/null 2>&1
+( cd "$cs_repo" && bash "$root/scripts/caller_slices.sh" uncommitted "$cs_out" ) >/dev/null 2>&1
+grep -q 'beta' "$cs_out/callers.md" 2>/dev/null \
+  && ok "caller_slices: a cold symbol sharing a hunk with a hot one is not starved out" \
+  || bad "caller_slices: a symbol's only call-site was dropped because a hot symbol owned the hunk"
+
+# git grep MERGES nearby matches into one hunk, so a hunk count is not a size bound. Without a line
+# budget a single hot symbol produced a 400-line hunk while the status still read "<=5 hunks".
+(
+  cd "$cs_repo" || exit 1
+  i=1; while [ $i -le 120 ]; do printf 'packed()\n\n'; i=$((i+1)); done > src/packed.py
+  git add -A && git -c user.email=a@b -c user.name=a commit -qm packed
+  printf 'def helper():\n    pass\n\ndef packed():\n    pass\n' > src/lib.py
+) >/dev/null 2>&1
+( cd "$cs_repo" && bash "$root/scripts/caller_slices.sh" uncommitted "$cs_out" ) >/dev/null 2>&1
+cs_lines=$(sed -n '/^```$/,$p' "$cs_out/callers.md" 2>/dev/null | grep -c . | head -1)
+[ "${cs_lines:-999}" -le 200 ] \
+  && ok "caller_slices: a merged hunk is truncated to the per-symbol line budget ($cs_lines lines)" \
+  || bad "caller_slices: one merged hunk produced $cs_lines lines — the packet is unbounded"
+
+# git grep is scoped to the CWD subtree; git diff is not. Run from a subdirectory the script found no
+# call-sites and hard-stopped the review with EMPTY on a healthy repo.
+( cd "$cs_repo" && git checkout -- src/lib.py && mkdir -p sub \
+    && printf 'def helper():\n    pass\n\ndef subprobe():\n    pass\n' > src/lib.py \
+    && printf 'subprobe()\n' > src/subcall.py ) >/dev/null 2>&1
+cs_sub="$( cd "$cs_repo/sub" && bash "$root/scripts/caller_slices.sh" uncommitted "$cs_out" 2>&1 )"
+printf '%s' "$cs_sub" | grep -q 'CALLER_SLICES=OK' \
+  && ok "caller_slices: runs from a subdirectory (git grep is CWD-scoped, git diff is not)" \
+  || bad "caller_slices: from a subdirectory it reported $(printf '%s' "$cs_sub" | grep CALLER_SLICES=) — false hard-stop"
+
 # A diff with no keyword-declared symbols must say so, not write an empty fence.
-( cd "$cs_repo" && git checkout -- src/lib.py && printf 'nothing\n' > notes.txt ) >/dev/null 2>&1
+# `git add -N` so the change actually APPEARS in `git diff`. Creating an untracked file left the diff
+# empty, so this asserted the empty-diff path rather than "a real change with no declared symbols".
+( cd "$cs_repo" && git checkout -- src/lib.py \
+    && printf 'plain prose, no declarations\n' > notes.txt && git add -N notes.txt ) >/dev/null 2>&1
 cs_none="$( cd "$cs_repo" && bash "$root/scripts/caller_slices.sh" uncommitted "$cs_out" 2>&1 )"
 printf '%s' "$cs_none" | grep -q 'CALLER_SLICES=NO_SYMBOLS' \
   && ok "caller_slices reports NO_SYMBOLS instead of an empty slice set" \

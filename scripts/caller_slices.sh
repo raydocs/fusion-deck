@@ -5,7 +5,7 @@
 # used. This bundles each call-site with its surrounding block so the panel can judge the change against
 # real usage.
 #
-# Usage: caller_slices.sh <scope> <out_dir> [context_lines] [hunks_per_symbol]
+# Usage: caller_slices.sh <scope> <out_dir> [context_lines] [hunks_per_symbol] [lines_per_symbol]
 #   <scope>  uncommitted | staged | back:N | <range>   (same vocabulary as review_packet.sh)
 # Writes <out_dir>/callers.md and prints a greppable CALLER_SLICES= line plus one status line. The slice
 # bytes never pass through the caller's context — same discipline as review_packet.sh.
@@ -28,9 +28,18 @@ scope="${1:?usage: caller_slices.sh <scope> <out_dir> [context_lines] [hunks_per
 out_dir="${2:?usage: caller_slices.sh <scope> <out_dir> [context_lines] [hunks_per_symbol]}"
 ctx="${3:-4}"
 cap="${4:-5}"
+maxlines="${5:-60}"
 
-git rev-parse --show-toplevel >/dev/null 2>&1 || { echo "caller_slices: not a git repo" >&2; exit 2; }
-case "$ctx$cap" in *[!0-9]*) echo "caller_slices: context/cap must be whole numbers" >&2; exit 2 ;; esac
+toplevel="$(git rev-parse --show-toplevel 2>/dev/null)" \
+  || { echo "caller_slices: not a git repo" >&2; exit 2; }
+case "$ctx$cap$maxlines" in *[!0-9]*) echo "caller_slices: numeric args must be whole numbers" >&2; exit 2 ;; esac
+
+# Resolve out_dir BEFORE moving, then run from the repo ROOT. `git diff` is repo-wide from anywhere but
+# `git grep` is scoped to the CWD subtree, so running this from a subdirectory found no call-sites, hit
+# the empty-result guard and hard-stopped the review with EMPTY on a perfectly healthy repo.
+mkdir -p "$out_dir" || exit 2
+out_dir="$(cd "$out_dir" && pwd)" || exit 2
+cd "$toplevel" || exit 2
 
 case "$scope" in
   uncommitted) diff_cmd=(git diff) ;;
@@ -44,7 +53,6 @@ case "$scope" in
     else echo "caller_slices: unknown scope '$scope'" >&2; exit 2; fi ;;
 esac
 
-mkdir -p "$out_dir" || exit 2
 out="$out_dir/callers.md"
 symfile="$out_dir/.caller_syms"
 
@@ -80,37 +88,53 @@ while IFS= read -r s; do [ -n "$s" ] && pat+=(-e "$s"); done < "$symfile"
   # git grep separates hunks with a literal `--`. Attribute each hunk to the symbol on its match line
   # (joined by ':' rather than '-') and keep the first $cap hunks per symbol.
   git grep -n -w -C"$ctx" "${pat[@]}" 2>/dev/null \
-    | awk -v cap="$cap" -v symfile="$symfile" '
+    | awk -v cap="$cap" -v maxlines="$maxlines" -v symfile="$symfile" '
         BEGIN { WORD = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_" }
         FILENAME == symfile { if ($0 != "") a[++n] = $0; next }
-        # Keep git grep`s `--` between emitted hunks. Dropping it ran the slices together, so a reader
-        # could not tell where one call-site ended and the next began — and neither could a test count
-        # hunks to check the per-symbol cap.
-        function flush(  i) {
-          if (owner != "" && seen[owner] < cap) {
-            seen[owner]++
-            if (emitted++) print "--"
-            for (i = 1; i <= nb; i++) print buf[i]
+        function reset(  i) { for (i in owners) delete owners[i]; nowners = 0; nb = 0 }
+        # A hunk belongs to EVERY symbol matched inside it, not just the first. Owning it by one symbol
+        # meant a hunk was dropped whole once that owner hit its cap — taking with it the only call-site
+        # of any colder symbol that happened to share the hunk. Measured: a symbol with two real
+        # call-sites contributed zero lines because a hot symbol owned the hunks they shared.
+        function flush(  i, o, room, r, take) {
+          if (nowners == 0) { reset(); return }
+          room = 0
+          for (i = 1; i <= nowners; i++) {
+            o = owners[i]
+            if (seen[o] < cap) { r = maxlines - lines[o]; if (r > room) room = r }
           }
-          nb = 0; owner = ""
+          if (room <= 0) { reset(); return }
+          # git grep MERGES matches closer than 2*context into one hunk, so a hunk is not a bounded unit:
+          # 200 adjacent call-sites arrived as a single 400-line hunk while the count still read "<=5".
+          # Truncate to the remaining line budget rather than emit it whole or drop it entirely.
+          take = (nb <= room) ? nb : room
+          if (emitted++) print "--"
+          for (i = 1; i <= take; i++) print buf[i]
+          if (take < nb) printf "   [... %d more lines in this hunk, truncated at the per-symbol line budget]\n", nb - take
+          for (i = 1; i <= nowners; i++) { o = owners[i]; seen[o]++; lines[o] += take }
+          reset()
         }
         /^--$/ { flush(); next }
         {
           buf[++nb] = $0
-          if (owner == "" && $0 ~ /^[^:]+:[0-9]+:/) {
-            # Attribute on the CONTENT, with word boundaries — not `index()` over the whole line. The
-            # line starts with `path:line:`, so a substring test let a file named Character.cs own every
-            # hunk in it and quietly voided the per-symbol cap for whatever else matched there.
-            # index() + manual boundary test, not a regex: building one regex per symbol per line was
-            # 20 compiles x every match line and made this pass SLOWER than the 20-process loop it
-            # replaced (417 ms vs 321 ms). index() is a plain scan.
+          if ($0 ~ /^[^:]+:[0-9]+:/) {
+            # Attribute on the CONTENT with word boundaries — not index() over the whole line, which let
+            # a file named Character.cs own every hunk in it and voided the cap for anything else there.
+            # index(WORD, "") returns 1 (awk finds the empty string at position 1), so both edges are
+            # tested by POSITION; testing them with index() silently dropped every call-site where the
+            # symbol starts or ends the line.
             content = $0; sub(/^[^:]+:[0-9]+:/, "", content)
             for (i = 1; i <= n; i++) {
               p = index(content, a[i])
               if (p == 0) continue
-              before = (p == 1) ? "" : substr(content, p - 1, 1)
-              after  = substr(content, p + length(a[i]), 1)
-              if (index(WORD, before) == 0 && index(WORD, after) == 0) { owner = a[i]; break }
+              e = p + length(a[i])
+              if ((p == 1 || index(WORD, substr(content, p - 1, 1)) == 0) &&
+                  (e > length(content) || index(WORD, substr(content, e, 1)) == 0)) {
+                if (!(a[i] in mark) || mark[a[i]] != emitted + 1) {
+                  mark[a[i]] = emitted + 1
+                  owners[++nowners] = a[i]
+                }
+              }
             }
           }
         }
@@ -134,4 +158,4 @@ if [ "${body:-0}" -eq 0 ]; then
   exit 4
 fi
 echo "CALLER_SLICES=OK"
-echo "caller_slices: wrote $out: $bytes bytes ($n_sym symbols, $body lines, <=$cap hunks each, ${ctx} context)"
+echo "caller_slices: wrote $out: $bytes bytes ($n_sym symbols, $body lines; per symbol <=$cap hunks and <=$maxlines lines; ${ctx} lines of context)"

@@ -163,7 +163,15 @@ awk -F'\t' '
 # One awk pass, not a shell loop. The `while read` form ran ~800 iterations calling a shell function and
 # a `[ -f ]` per line: measured 532 ms of a 978 ms warm build, on bash 3.2 loop overhead alone. Deletions
 # now come from a single `git ls-files -d` rather than one stat per file.
-( cd "$repo" && git ls-files -d ) 2>/dev/null | sort -u > "$tmp/deleted"
+# Checked, not swallowed: an empty `deleted` list is indistinguishable from "nothing was deleted", and
+# it silently restores the exact defect this block exists to prevent — a removed file keeping its
+# file_map entry and a full signature block for functions that no longer exist.
+if ! ( cd "$repo" && git ls-files -d ) 2>"$tmp/del_err" | sort -u > "$tmp/deleted"; then
+  echo "fusion_map: could not list deleted files; a removed file would keep its stale signatures." >&2
+  sed 's/^/fusion_map:   /' "$tmp/del_err" >&2
+  echo "MAP_STATE=DELETED_UNKNOWN"
+  exit 6
+fi
 awk -F'\t' -v exts="$FUSION_SOURCE_EXT" -v del="$tmp/deleted" '
   BEGIN { n = split(exts, a, " "); for (i = 1; i <= n; i++) ok["." a[i]] = 1 }
   FILENAME == del { gone[$0] = 1; next }
