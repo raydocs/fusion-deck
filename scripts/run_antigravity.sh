@@ -36,6 +36,14 @@ antigravity_model="${FUSION_ANTIGRAVITY_MODEL:-Gemini 3.1 Pro (High)}"
 # 304s — the same order of magnitude as the 300s cap, which is the worst possible place for a hard limit.
 # One prompt timed out at 304s and succeeded at 240s on retry: the cap was mispositioned, not the prompt.
 timeout_secs="${FUSION_PANEL_TIMEOUT:-600}"
+# Validate before arithmetic: in an arithmetic context bash treats a non-numeric string as a VARIABLE
+# NAME, so `FUSION_PANEL_TIMEOUT=abc` died with "abc: unbound variable" under `set -u` — a crash whose
+# message names neither the variable the operator set nor the reason.
+case "$timeout_secs" in
+  ''|*[!0-9]*)
+    echo "[run_antigravity.sh] FUSION_PANEL_TIMEOUT must be a whole number of seconds (got '$timeout_secs')." >&2
+    exit 2 ;;
+esac
 _agy_grace=$(( timeout_secs > 60 ? timeout_secs - 30 : timeout_secs ))
 print_timeout="${FUSION_ANTIGRAVITY_PRINT_TIMEOUT:-${_agy_grace}s}"
 echo "[run_antigravity.sh] MODEL=$antigravity_model PRINT_TIMEOUT=$print_timeout BACKEND=antigravity" >&2

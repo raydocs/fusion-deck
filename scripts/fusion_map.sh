@@ -87,7 +87,19 @@ trap '_fm_cleanup; exit 143' TERM
 tier="$(bash "$here/codemap.sh" --print-tier 2>/dev/null | cut -d= -f2)"
 [ -n "$tier" ] || tier=REGEX
 
-cache_root="${FUSION_MAP_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/fusion-deck}"
+# HOME is not guaranteed (cron, CI, some container runtimes) and `set -u` turns a bare $HOME into a
+# hard crash partway through. Fall back to a temp cache: slower, never fatal, and it says so.
+if [ -n "${FUSION_MAP_CACHE:-}" ]; then
+  cache_root="$FUSION_MAP_CACHE"
+elif [ -n "${XDG_CACHE_HOME:-}" ]; then
+  cache_root="$XDG_CACHE_HOME/fusion-deck"
+elif [ -n "${HOME:-}" ]; then
+  cache_root="$HOME/.cache/fusion-deck"
+else
+  cache_root="$tmp/cache"
+  echo "fusion_map: neither FUSION_MAP_CACHE, XDG_CACHE_HOME nor HOME is set — caching to a temp dir," >&2
+  echo "fusion_map: so this run cannot reuse or leave a warm cache." >&2
+fi
 [ "${FUSION_MAP_NO_CACHE:-0}" = "1" ] && cache_root="$tmp/nocache"
 # Namespaced by repo so two projects never share entries, and kept OUT of the repo: a context builder
 # that writes into the tree it is describing is a surprising contract, and the cache grows without bound.
@@ -201,10 +213,14 @@ if [ "$n_miss" -gt 0 ]; then
   # If codemap.sh degraded mid-run (e.g. tree-sitter selected but no file parsed), the blocks we just
   # wrote are NOT the tier we keyed them under. Re-key rather than mislabel them.
   if [ -n "$batch_tier" ] && [ "$batch_tier" != "$tier" ]; then
-    echo "fusion_map: codemap.sh realized $batch_tier, not $tier — re-keying this batch." >&2
-    mkdir -p "$cache_root/$repo_key/$batch_tier"
-    mv "$cache"/*.map "$cache_root/$repo_key/$batch_tier/" 2>/dev/null
+    # Switch where THIS run publishes; do NOT move what is already there. The previous code did
+    # `mv "$cache"/*.map` into the new tier dir, which relabelled blocks EARLIER runs had correctly
+    # produced at the old fidelity — the exact lie the tier key exists to prevent. It also could never
+    # have moved "this batch": these blocks are still in the staging dir at this point.
+    echo "fusion_map: codemap.sh realized $batch_tier, not the probed $tier — publishing under" >&2
+    echo "fusion_map: $batch_tier. Existing $tier entries are left alone; they were produced at $tier." >&2
     tier="$batch_tier"; cache="$cache_root/$repo_key/$tier"
+    mkdir -p "$cache" || exit 2
   fi
 
   # Fan out: one awk pass writes each file's block to $cache/<sha>.map. Absolute paths are mapped back to

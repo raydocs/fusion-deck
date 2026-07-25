@@ -548,6 +548,26 @@ fi
   || bad "fusion_map: a signalled run left .stage.* behind in the cache"
 rm -rf "$fm_sig_repo" "$fm_sig_cache" "$fm_sig_out"
 
+# HOME is not guaranteed under cron/CI, and `set -u` turned a bare $HOME into a crash partway through.
+if ( cd "$fm_repo" && env -u HOME -u XDG_CACHE_HOME -u FUSION_MAP_CACHE \
+       bash "$root/scripts/fusion_map.sh" "$fm_out" ) >/dev/null 2>&1; then
+  ok "fusion_map: survives an unset HOME (falls back to a temp cache)"
+else
+  bad "fusion_map: crashes when HOME is unset — cron and CI runs would die mid-build"
+fi
+# A non-numeric timeout is a VARIABLE NAME in bash arithmetic; under set -u that crashed with a message
+# naming neither the variable the operator set nor the reason.
+tl_bad_dir="$(mktemp -d "${TMPDIR:-/tmp}/pfo_tlbad.XXXXXX")"
+printf '#!/usr/bin/env bash\nprintf "%%0.sX" {1..300}\n' > "$tl_bad_dir/agy"; chmod +x "$tl_bad_dir/agy"
+printf 'probe\n' > "$tl_bad_dir/p.md"
+tl_bad="$(PATH="$tl_bad_dir:$PATH" FUSION_PANEL_TIMEOUT=abc bash "$root/scripts/run_antigravity.sh" \
+            "$tl_bad_dir/p.md" "$tl_bad_dir/o.md" 2>&1 | head -1)"
+case "$tl_bad" in
+  *"must be a whole number"*) ok "run_antigravity: a non-numeric FUSION_PANEL_TIMEOUT is rejected by name" ;;
+  *) bad "run_antigravity: bad FUSION_PANEL_TIMEOUT produced '$tl_bad' instead of a named error" ;;
+esac
+rm -rf "$tl_bad_dir"
+
 # Honest degrade: not a repo => exit 2 + NO_GIT; a repo with no source => exit 3 (never an empty success).
 fm_nogit="$(mktemp -d "${TMPDIR:-/tmp}/pfo_fmng.XXXXXX")"
 ( cd "$fm_nogit" && FUSION_MAP_CACHE="$fm_cache" bash "$root/scripts/fusion_map.sh" "$fm_nogit" >/dev/null 2>&1 ); fm_rc=$?
@@ -713,6 +733,12 @@ if printf '%s' "$cm_prune" | grep -q 'src/real.py' && ! printf '%s' "$cm_prune" 
   ok "codemap.sh prunes build/vendor trees instead of descending into them"
 else
   bad "codemap.sh walked a pruned directory (or missed real source)"
+fi
+# A tier mismatch must NOT relabel blocks earlier runs produced at the old fidelity.
+if grep -q 'mv "\$cache"/\*\.map "\$cache_root' "$root/scripts/fusion_map.sh"; then
+  bad "fusion_map: a tier re-key moves existing cache entries — that relabels another run's fidelity"
+else
+  ok "fusion_map: a tier re-key only redirects future writes, leaving existing entries labelled correctly"
 fi
 grep -q '\-prune' "$root/scripts/codemap.sh" \
   && ok "codemap.sh directory walk uses -prune" \
