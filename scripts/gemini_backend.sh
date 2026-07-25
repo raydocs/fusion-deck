@@ -92,14 +92,39 @@ fusion_panel_workspace() {
         printf '%s\0' "$p"
       done >> "$keep"
   if [ -s "$keep" ]; then
-    ( cd "$top" && tar -cf - --null -T "$keep" ) 2>/dev/null | ( cd "$dest" && tar -xf - ) 2>/dev/null
+    if ! ( cd "$top" && tar -cf - --null -T "$keep" ) 2>/dev/null | ( cd "$dest" && tar -xf - ) 2>/dev/null; then
+      rm -f "$keep"
+      echo "[fusion_panel_workspace] copying untracked files failed — refusing to hand over a partial snapshot." >&2
+      return 1
+    fi
   fi
   rm -f "$keep"
 
-  # Give the seat a working `git` again — a FRESH standalone index, no remote, no path to the original.
-  # `git grep` / `git ls-files` genuinely help a reviewer; a backlink does not. No commit: `git grep`
-  # works off the index, and hashing every blob a second time bought nothing.
-  ( cd "$dest" && git init -q . && git add -A ) >/dev/null 2>&1
+  # STRIP EVERY SYMLINK from the finished snapshot.
+  #
+  # Filtering the untracked list was not enough: `git archive` faithfully reproduces TRACKED symlinks, so
+  # a repo that tracks `link -> ~/.ssh/id_rsa` handed the seat a working read-through to arbitrary host
+  # files from inside the "isolated" snapshot. Verified. Doing it here, after extraction, also closes the
+  # TOCTOU in the untracked path (filtered by path, then re-opened by tar).
+  #
+  # Removing rather than repairing: a link that escapes is a leak, and one that stays inside is redundant
+  # because its target is already in the snapshot. A code reviewer needs neither.
+  _fpw_links="$(find "$dest" -type l 2>/dev/null | wc -l | tr -d ' ')"
+  if [ "${_fpw_links:-0}" -gt 0 ]; then
+    find "$dest" -type l -exec rm -f {} + 2>/dev/null
+    echo "[fusion_panel_workspace] removed $_fpw_links symlink(s) from the snapshot (they can resolve outside it)." >&2
+  fi
+
+  # Give the seat a working `git` again — a FRESH standalone history, no remote, no path to the original.
+  # WITH a commit: `git add -A` is the hashing step (measured 93 ms); the commit only writes trees and one
+  # object (26 ms) and reusing the index's blob IDs costs nothing. Skipping it left an unborn HEAD, so
+  # `git diff HEAD`, `git log` and `git show` all exited 128 for the seat — a real capability loss for
+  # 26 ms. A failure here is NOT survivable silently: the caller would report a seat that read the code.
+  if ! ( cd "$dest" && git init -q . && git add -A \
+         && git -c user.email=panel@fusion -c user.name=panel commit -qm "panel snapshot" ) >/dev/null 2>&1; then
+    echo "[fusion_panel_workspace] could not initialize the snapshot repo — refusing to report a workspace." >&2
+    return 1
+  fi
 
   printf '%s\n' "$dest"
 }

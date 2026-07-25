@@ -56,6 +56,15 @@ map in it. The two ways to get there, both remediable: the language's extension 
 "no context was produced" and say so, exactly as a missing panelist is reported ABSENT rather than silently
 counted as agreement.
 
+## Panel snapshots contain no symlinks
+
+`fusion_panel_workspace` strips **every** symlink from a seat's snapshot. Filtering the untracked list was
+not enough: `git archive` faithfully reproduces **tracked** symlinks, so a repo tracking
+`link -> ~/.ssh/id_rsa` handed the seat a working read-through to arbitrary host files from inside the
+"isolated" snapshot. Stripping after extraction also closes the check-then-open race in the untracked
+path. A link that escapes is a leak; one that stays inside is redundant, since its target is already in
+the snapshot.
+
 ## Language coverage
 
 Directory walks cover the keyword-declared languages plus the **modifier-led** ones (C#, Swift, Kotlin,

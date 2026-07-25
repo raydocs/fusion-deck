@@ -372,7 +372,7 @@ rm -f "$fm_repo/src/new.py"
 
 # Truncation must be DISCLOSED, and file_map must stay complete — a file dropped from the codemap is
 # still named, so a seat knows it exists and can read it.
-fm_trunc="$( cd "$fm_repo" && FUSION_MAP_BUDGET_TOKENS=1 bash "$root/scripts/fusion_map.sh" "$fm_out" 2>/dev/null )"
+fm_trunc="$( cd "$fm_repo" && FUSION_MAP_CACHE="$fm_cache" FUSION_MAP_BUDGET_TOKENS=1 bash "$root/scripts/fusion_map.sh" "$fm_out" 2>/dev/null )"
 if [ "$(fm_get "$fm_trunc" MAP_STATE)" = "TRUNCATED" ] && [ "$(fm_get "$fm_trunc" MAP_DROPPED)" -gt 0 ]; then
   ok "fusion_map: over-budget run discloses MAP_STATE=TRUNCATED + MAP_DROPPED"
 else
@@ -521,13 +521,40 @@ else
   ok "fusion_map: leaves no cache artifacts inside the target repo"
 fi
 
+# A signal handler that only cleans up RESUMES the script: an interrupted run continued with $tmp already
+# deleted and still printed MAP_STATE=FULL and exit 0. SIGTERM is what this harness can deliver (a
+# non-interactive shell ignores SIGINT in background jobs, so no trap of any shape could be tested that
+# way); the INT handler is the same shape with a different exit code.
+fm_sig_repo="$(mktemp -d "${TMPDIR:-/tmp}/pfo_fmsig.XXXXXX")"
+(
+  cd "$fm_sig_repo" || exit 1
+  git init -q .
+  i=1; while [ $i -le 400 ]; do printf 'def f%s():\n    pass\n' "$i" > "f$i.py"; i=$((i+1)); done
+  git add -A && git -c user.email=a@b -c user.name=a commit -qm init
+) >/dev/null 2>&1
+fm_sig_cache="$(mktemp -d "${TMPDIR:-/tmp}/pfo_fmsigc.XXXXXX")"
+fm_sig_out="$(mktemp -d "${TMPDIR:-/tmp}/pfo_fmsigo.XXXXXX")"
+( cd "$fm_sig_repo" && FUSION_MAP_CACHE="$fm_sig_cache" bash "$root/scripts/fusion_map.sh" "$fm_sig_out" ) \
+  >"$fm_sig_out/log" 2>&1 &
+fm_sig_pid=$!
+sleep 0.4; kill -TERM "$fm_sig_pid" 2>/dev/null; wait "$fm_sig_pid" 2>/dev/null; fm_sig_rc=$?
+if [ "$fm_sig_rc" -ne 0 ] && ! grep -q '^MAP_STATE=' "$fm_sig_out/log" 2>/dev/null; then
+  ok "fusion_map: a signalled run stops (rc=$fm_sig_rc) instead of finishing with a success state"
+else
+  bad "fusion_map: signalled run exited $fm_sig_rc and still emitted $(grep -c '^MAP_STATE=' "$fm_sig_out/log" 2>/dev/null) MAP_STATE line(s)"
+fi
+[ "$(find "$fm_sig_cache" -name '.stage.*' 2>/dev/null | wc -l | tr -d ' ')" = 0 ] \
+  && ok "fusion_map: a signalled run strands no staging dir in the cache" \
+  || bad "fusion_map: a signalled run left .stage.* behind in the cache"
+rm -rf "$fm_sig_repo" "$fm_sig_cache" "$fm_sig_out"
+
 # Honest degrade: not a repo => exit 2 + NO_GIT; a repo with no source => exit 3 (never an empty success).
 fm_nogit="$(mktemp -d "${TMPDIR:-/tmp}/pfo_fmng.XXXXXX")"
-( cd "$fm_nogit" && bash "$root/scripts/fusion_map.sh" "$fm_nogit" >/dev/null 2>&1 ); fm_rc=$?
+( cd "$fm_nogit" && FUSION_MAP_CACHE="$fm_cache" bash "$root/scripts/fusion_map.sh" "$fm_nogit" >/dev/null 2>&1 ); fm_rc=$?
 [ "$fm_rc" -eq 2 ] && ok "fusion_map: outside a git repo exits 2" || bad "fusion_map: outside a git repo exited $fm_rc (want 2)"
 ( cd "$fm_nogit" && git init -q . && echo x > README.nosrc && git add -A \
     && git -c user.email=a@b -c user.name=a commit -qm x \
-    && bash "$root/scripts/fusion_map.sh" "$fm_nogit" >/dev/null 2>&1 ); fm_rc=$?
+    && FUSION_MAP_CACHE="$fm_cache" bash "$root/scripts/fusion_map.sh" "$fm_nogit" >/dev/null 2>&1 ); fm_rc=$?
 [ "$fm_rc" -eq 3 ] && ok "fusion_map: a source-free repo exits 3 (no empty map)" \
   || bad "fusion_map: source-free repo exited $fm_rc (want 3) — silent empty map"
 rm -rf "$fm_repo" "$fm_out" "$fm_nogit" "$fm_cache"
@@ -581,9 +608,15 @@ ws_dest="$(mktemp -d "${TMPDIR:-/tmp}/pfo_wsdest.XXXXXX")/repo"
   git add -A && git -c user.email=a@b -c user.name=a commit -qm init
   printf 'def committed():\n    pass\n\ndef uncommitted_edit():\n    pass\n' > a.py   # unstaged edit
   printf 'def brand_new():\n    pass\n' > b.py                                        # untracked
+  mkdir -p "dir with space"
+  printf 'def spaced():\n    pass\n' > "dir with space/un tracked.py"                  # spaces: the
+  printf 'def tracked_space():\n    pass\n' > "dir with space/tracked file.py"         # cp->tar rewrite
+  git add -A
   mkdir -p .fusion/exports && printf 'PRIOR JUDGED ANSWER\n' > .fusion/exports/old.md  # must NOT leak
   printf 'SECRET-KEY-MATERIAL\n' > ../outside_secret                                     # outside the repo
   ln -s "$(cd .. && pwd)/outside_secret" leak.py                                          # untracked symlink
+  ln -s "$(cd .. && pwd)/outside_secret" tracked_leak.py && git add -f tracked_leak.py     # TRACKED symlink
+  git -c user.email=a@b -c user.name=a commit -qm links
 ) >/dev/null 2>&1
 ( . "$root/scripts/gemini_backend.sh"; fusion_panel_workspace "$ws_repo" "$ws_dest" ) >/dev/null 2>&1
 ws_rc=$?
@@ -595,6 +628,11 @@ if [ "$ws_rc" -eq 0 ] && [ -d "$ws_dest" ]; then
   [ -f "$ws_dest/b.py" ] \
     && ok "fusion_panel_workspace: untracked source files are present" \
     || bad "fusion_panel_workspace: untracked file missing — a new file under review would be invisible"
+  # The per-file cp loop became one `tar --null -T`; a filename with a space is exactly what that rewrite
+  # can drop, and the fixture had none.
+  [ -f "$ws_dest/dir with space/un tracked.py" ] \
+    && ok "fusion_panel_workspace: untracked paths containing spaces survive the batched copy" \
+    || bad "fusion_panel_workspace: an untracked path with a space was lost by the tar copy"
   # THE blindness leak: .fusion/exports holds PRIOR judged answers. A seat that reads one is no longer
   # independent, and panel-prompt.md requires blindness be structural, not hoped-for.
   [ -e "$ws_dest/.fusion" ] \
@@ -621,6 +659,20 @@ if [ "$ws_rc" -eq 0 ] && [ -d "$ws_dest" ]; then
   [ -e "$ws_dest/leak.py" ] \
     && bad "panel workspace: an untracked symlink was dereferenced into the seat workspace (exfiltration)" \
     || ok "panel workspace: untracked symlinks are refused, not dereferenced"
+  # git archive faithfully reproduces TRACKED symlinks, so filtering only the untracked list still handed
+  # the seat a read-through to arbitrary host files. Verified before the fix.
+  [ -e "$ws_dest/tracked_leak.py" ] \
+    && bad "panel workspace: a TRACKED symlink survived into the snapshot (reads outside the repo)" \
+    || ok "panel workspace: tracked symlinks are stripped from the snapshot"
+  [ "$(find "$ws_dest" -type l 2>/dev/null | wc -l | tr -d ' ')" = 0 ] \
+    && ok "panel workspace: the snapshot contains no symlinks at all" \
+    || bad "panel workspace: symlinks remain in the snapshot"
+  # The seat needs a usable git: an unborn HEAD made diff/log/show exit 128 for a 26 ms saving.
+  if ( cd "$ws_dest" && git diff HEAD >/dev/null 2>&1 && git log --oneline >/dev/null 2>&1 ); then
+    ok "panel workspace: the snapshot has a real HEAD (git diff/log work for the seat)"
+  else
+    bad "panel workspace: unborn HEAD — git diff HEAD / git log fail inside the snapshot"
+  fi
   ( . "$root/scripts/gemini_backend.sh"; fusion_panel_workspace_cleanup "$ws_repo" "$ws_dest" ) >/dev/null 2>&1
   [ -e "$ws_dest" ] && bad "fusion_panel_workspace_cleanup left the worktree behind" \
                     || ok "fusion_panel_workspace_cleanup removes the worktree"

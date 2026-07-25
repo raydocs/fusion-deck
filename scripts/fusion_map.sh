@@ -72,8 +72,14 @@ tmp="$(mktemp -d "${TMPDIR:-/tmp}/fusion-map.XXXXXX")" || exit 2
 # The cache staging dir lives under $cache (so the rename is same-filesystem), which $tmp's trap does not
 # cover — an interrupted run would strand .stage.<pid> in the cache forever. INT/TERM too: the EXIT trap
 # alone does not fire when the panel is Ctrl-C'd or the parent times out.
+# The INT/TERM handlers must EXIT. A bash signal handler that merely returns hands control back to the
+# script: an interrupted run continued with $tmp already deleted and still emitted MAP_STATE=FULL and
+# exit 0. Cleaning up is not the same as stopping. (EXIT also fires on the way out; rm -rf is idempotent.)
 _fm_stage=""
-trap 'rm -rf "$tmp" ${_fm_stage:+"$_fm_stage"}' EXIT INT TERM
+_fm_cleanup() { rm -rf "$tmp" ${_fm_stage:+"$_fm_stage"}; }
+trap '_fm_cleanup' EXIT
+trap '_fm_cleanup; exit 130' INT
+trap '_fm_cleanup; exit 143' TERM
 
 # Ask codemap.sh which tier it would run (it owns that logic; re-deriving it here would drift) and key the
 # cache on it. Without a tier in the key, blocks built at REGEX are reused verbatim after tree-sitter is
@@ -208,7 +214,7 @@ if [ "$n_miss" -gt 0 ]; then
   # observe a half-copied block.
   stage="$cache/.stage.$$"; _fm_stage="$stage"
   mkdir -p "$stage"
-  awk -v cache="$stage" -v stage="$stage" -v repo="$repo/" '
+  awk -v stage="$stage" -v repo="$repo/" '
     NR == FNR { sha[$2] = $1; next }
     /^CODEMAP_(FILES|STATE)=/ { next }
     /^File: / {
@@ -226,8 +232,24 @@ if [ "$n_miss" -gt 0 ]; then
   ' FS='\t' "$tmp/miss" FS=' ' "$tmp/batch_out"
   # One mv for the whole batch: rename is atomic per file, so a concurrent reader sees either the old
   # entry or the complete new one, never a partial block.
-  mv "$stage"/*.map "$cache"/ 2>/dev/null
-  rmdir "$stage" 2>/dev/null; _fm_stage=""
+  staged_n=$(find "$stage" -name '*.map' 2>/dev/null | wc -l | tr -d ' ')
+  # A glob `mv` in one shot (fast, and POSIX-correct — `find -exec mv {} DEST +` is INVALID because {}
+  # must sit immediately before +, and BSD find rejects it outright, which silently published nothing).
+  # Fall back to one mv per file only if the single call fails, which is where ARG_MAX would bite on a
+  # very large cold batch.
+  if ! mv "$stage"/*.map "$cache"/ 2>"$tmp/publish_err"; then
+    find "$stage" -name '*.map' -print0 2>/dev/null \
+      | while IFS= read -r -d '' _blk; do mv "$_blk" "$cache/" 2>/dev/null; done
+  fi
+  left_n=$(find "$stage" -name '*.map' 2>/dev/null | wc -l | tr -d ' ')
+  if [ "${left_n:-0}" -gt 0 ]; then
+    # Silence here would be permanent: the run reports its CACHE_MISS count as if the blocks landed, and
+    # every later run re-misses exactly the same files, forever, with no symptom but slowness.
+    echo "fusion_map: published $((staged_n - left_n))/$staged_n cache block(s); $left_n could not be" >&2
+    echo "fusion_map: written to '$cache'. The map for THIS run is complete, but the cache did not warm." >&2
+    sed 's/^/fusion_map:   /' "$tmp/publish_err" >&2
+  fi
+  rm -rf "$stage"; _fm_stage=""
 fi
 
 

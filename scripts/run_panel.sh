@@ -141,8 +141,11 @@ manifest_tmp="$manifest.tmp"
   # only in a log, the default outcome is a silent over-claim about what each seat actually saw.
   _cx_ws="$(sed -n 's/.*WORKSPACE=\([^ ]*\).*/\1/p' "$out_dir/codex.log" 2>/dev/null | tail -1 | tr -d '\n')"
   _gm_ws="$(sed -n 's/.*WORKSPACE=\([^ ]*\).*/\1/p' "$out_dir/gemini.log" 2>/dev/null | tail -1 | tr -d '\n')"
-  echo "CODEX_WORKSPACE=${_cx_ws:-none}"
-  echo "GEMINI_WORKSPACE=${_gm_ws:-none}"
+  # `none` is a DECISION the runner logs (repo access declined / refused); `absent` means the seat never
+  # got far enough to log anything. Collapsing them would tell the judge a seat chose to work from the
+  # packet when in fact it never ran.
+  echo "CODEX_WORKSPACE=${_cx_ws:-absent}"
+  echo "GEMINI_WORKSPACE=${_gm_ws:-absent}"
   echo "# NOTE: Claude panelists + judge are added by the orchestrator, not this script."
 } > "$manifest_tmp"
 
