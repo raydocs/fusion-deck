@@ -1319,6 +1319,20 @@ else
   bad "routing-table drift: SKILL=$r_skill remind=$r_remind README=$r_readme"
 fi
 
+# A badge that states a number is a claim, and a stale claim on the front page is the same class of lie
+# as a run reporting a panel it did not have. This has to run LAST: the total is only settled here, and
+# the badge counts itself, so the target is the total including this assertion.
+# head -1: the value appears twice in the SVG (aria-label and the <text>), and two lines make the
+# numeric comparison below error out rather than compare.
+_badge_n="$(grep -oE '[0-9]+ PASSING' "$root/assets/readme/badges/badge-smoke.svg" 2>/dev/null | grep -oE '^[0-9]+' | head -1)"
+if [ -n "$_badge_n" ]; then
+  if [ "$_badge_n" -eq "$(( pass + fail + 1 ))" ]; then
+    ok "README smoke badge ($_badge_n) matches the suite's assertion count"
+  else
+    bad "README smoke badge says $_badge_n, suite has $(( pass + fail + 1 )) — rerun scripts/charts/gen_readme_badges.js"
+  fi
+fi
+
 echo
 echo "== result: $pass passed, $fail failed =="
 [ "$fail" -eq 0 ] || exit 1

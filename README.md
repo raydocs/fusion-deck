@@ -4,7 +4,11 @@
 
 # fusion-deck
 
-**v2.1** · shared repo map, per-seat code access, honest timeout layering — see [the measured part](#the-context-layer-measured) below.
+<a href="https://github.com/raydocs/fusion-deck/releases/tag/v2.1"><img src="assets/readme/badges/badge-version.svg" alt="Version v2.1" height="22"></a>
+<a href="#development-verification"><img src="assets/readme/badges/badge-smoke.svg" alt="Smoke: 287 passing" height="22"></a>
+<img src="assets/readme/badges/badge-panel.svg" alt="Panel: Claude + Codex + Gemini" height="22">
+<img src="assets/readme/badges/badge-deps.svg" alt="Runtime: bash + python3" height="22">
+<a href="LICENSE"><img src="assets/readme/badges/badge-license.svg" alt="License: MIT" height="22"></a>
 
 **A Claude Code decision-and-execution skill that spends extra models only when the risk earns it.** It can fan a hard question to independent panelists, keep answers blind, have Claude judge the result, and disclose the panel that actually ran. Around that core are mechanical workflows for planning, context curation, investigation, orchestration, optimization, refactoring, and handoff.
 
@@ -172,7 +176,7 @@ Cognition/Devin measured that delegation backfires when subtle intent matters �
 ## Development verification
 
 ```bash
-bash scripts/smoke_test.sh                                   # 286 assertions, offline
+bash scripts/smoke_test.sh                                   # 287 assertions, offline
 python3 scripts/route_task.py --check tests/router_cases.yml
 node scripts/charts/gen_readme_charts.js assets/readme/charts # regenerate the README charts
 ```
