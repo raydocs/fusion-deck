@@ -610,6 +610,38 @@ done
 grep -q 'model: sonnet' "$root/references/context-discovery.md" \
   && ok "context-discovery.md pins the retrieval subagent to a fast model" \
   || bad "context-discovery.md leaves the discovery subagent unpinned — top-tier model doing grep"
+# Edge shapes the awk rewrites must survive. The empty-first-file trap in particular has bitten three
+# separate times: with an empty cache listing, `NR==FNR` stays true for every record of the SECOND file
+# and silently swallows the whole inventory.
+fm_edge="$(mktemp -d "${TMPDIR:-/tmp}/pfo_fmedge.XXXXXX")"
+(
+  cd "$fm_edge" || exit 1
+  git init -q .
+  mkdir -p "dir with space" "dir.d"
+  printf 'def a():\n    pass\n' > "dir with space/my file.py"   # spaces survive the pipeline
+  printf 'def b():\n    pass\n' > "dir.d/noext"                 # a dot in the DIR is not an extension
+  printf 'def c():\n    pass\n' > "a.b.py"                      # classified by the LAST extension
+  printf 'x\n'                   > img.png                       # non-source stays out
+  git add -A && git -c user.email=a@b -c user.name=a commit -qm init
+) >/dev/null 2>&1
+fm_ec="$(mktemp -d "${TMPDIR:-/tmp}/pfo_fmec.XXXXXX")"
+fm_eo="$(mktemp -d "${TMPDIR:-/tmp}/pfo_fmeo.XXXXXX")"
+fm_e1="$( cd "$fm_edge" && FUSION_MAP_CACHE="$fm_ec" bash "$root/scripts/fusion_map.sh" "$fm_eo" 2>/dev/null )"
+fm_e2="$( cd "$fm_edge" && FUSION_MAP_CACHE="$fm_ec" bash "$root/scripts/fusion_map.sh" "$fm_eo" 2>/dev/null )"
+[ "$(fm_get "$fm_e1" MAP_FILES)" = 2 ] \
+  && ok "fusion_map: extension filter takes the last extension and ignores dots in directories" \
+  || bad "fusion_map: MAP_FILES=$(fm_get "$fm_e1" MAP_FILES) on the edge fixture, expected 2"
+[ "$(fm_get "$fm_e1" CACHE_MISS)" = 2 ] \
+  && ok "fusion_map: an EMPTY cache listing does not swallow the inventory (awk first-file trap)" \
+  || bad "fusion_map: cold MISS=$(fm_get "$fm_e1" CACHE_MISS), expected 2 — empty first file swallowed records"
+[ "$(fm_get "$fm_e2" CACHE_HIT)" = 2 ] \
+  && ok "fusion_map: warm run hits every entry written by the cold run" \
+  || bad "fusion_map: warm HIT=$(fm_get "$fm_e2" CACHE_HIT), expected 2"
+grep -q 'my file.py' "$fm_eo/map.md" 2>/dev/null \
+  && ok "fusion_map: a path containing spaces survives the awk pipeline" \
+  || bad "fusion_map: a path with spaces was lost"
+rm -rf "$fm_edge" "$fm_ec" "$fm_eo"
+
 echo "-- caller_slices behaviour --"
 # Functional, not textual: this step has shipped three separate silent-empty bugs, so assert what the
 # script DOES on a real repo rather than what its source looks like.
@@ -639,6 +671,16 @@ if [ -f "$cs_out/callers.md" ] && grep -qE '^[^:]+-[0-9]+-' "$cs_out/callers.md"
 else
   bad "caller_slices produced no context lines — one line per hit is not reviewable"
 fi
+# A brand-new symbol has no callers yet, but git grep still finds its declaration. If that tripped the
+# empty guard the whole review would stop on the most ordinary kind of diff there is.
+( cd "$cs_repo" && git checkout -- src/lib.py \
+    && printf 'def helper():\n    pass\n\ndef brand_new():\n    pass\n' > src/lib.py ) >/dev/null 2>&1
+cs_new="$( cd "$cs_repo" && bash "$root/scripts/caller_slices.sh" uncommitted "$cs_out" 2>&1 )"
+cs_new_rc=$?
+{ [ "$cs_new_rc" -eq 0 ] && printf '%s' "$cs_new" | grep -q 'CALLER_SLICES=OK'; } \
+  && ok "caller_slices: a brand-new symbol does not false-fire the empty guard" \
+  || bad "caller_slices: brand-new symbol exited $cs_new_rc — an ordinary diff would stop the review"
+
 # A diff with no keyword-declared symbols must say so, not write an empty fence.
 ( cd "$cs_repo" && git checkout -- src/lib.py && printf 'nothing\n' > notes.txt ) >/dev/null 2>&1
 cs_none="$( cd "$cs_repo" && bash "$root/scripts/caller_slices.sh" uncommitted "$cs_out" 2>&1 )"
