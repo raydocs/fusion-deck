@@ -31,7 +31,40 @@ echo "[run_antigravity.sh] MODEL=$antigravity_model PRINT_TIMEOUT=$print_timeout
 prompt_abs="$(cd "$(dirname "$prompt_file")" && pwd)/$(basename "$prompt_file")"
 out_abs="$(cd "$(dirname "$output_file")" && pwd)/$(basename "$output_file")"
 scratch="$(mktemp -d "${TMPDIR:-/tmp}/pfo-antigravity.XXXXXX")"
-trap 'rm -rf "$scratch"' EXIT
+workspace=""
+trap 'fusion_panel_workspace_cleanup "${FUSION_PANEL_REPO:-}" "$workspace"; rm -rf "$scratch"' EXIT
+
+# Repo access for THIS seat is opt-in and OFF by default, unlike run_codex.sh.
+#
+# The reason is asymmetric capability, not caution for its own sake: codex exposes `-s read-only` and a
+# web-tool switch, so /fusion-review can put it in a sandbox with no egress. `agy` exposes NEITHER — this
+# runner launches it with --dangerously-skip-permissions and there is no flag here that disables its
+# network or confines its filesystem access. `FUSION_NO_WEB=1` is honored by run_codex.sh alone; it has
+# never had any effect on this seat. A disposable snapshot bounds what WRITES touch; it does not bound
+# what the model can read elsewhere on the host or send anywhere. Since the review packet is UNTRUSTED
+# by construction (a diff can carry injected instructions), handing this seat the code under review adds
+# an exfiltration surface with no mitigation available at this layer.
+#
+# So: packet-only by default. An operator who accepts that risk sets FUSION_PANEL_REPO_UNSANDBOXED=1,
+# and the run says so out loud.
+cwd="$scratch"
+if [ -n "${FUSION_PANEL_REPO:-}" ] && [ "${FUSION_PANEL_REPO_UNSANDBOXED:-0}" != "1" ]; then
+  echo "[run_antigravity.sh] WORKSPACE=none — repo access declined for this seat. agy runs with" >&2
+  echo "[run_antigravity.sh] --dangerously-skip-permissions and exposes no read-only/no-network mode, so" >&2
+  echo "[run_antigravity.sh] code access here cannot be paired with egress control. This seat answers from" >&2
+  echo "[run_antigravity.sh] the packet ALONE — weight it accordingly, and say so in the audit trail." >&2
+  echo "[run_antigravity.sh] Override (accepting the risk): FUSION_PANEL_REPO_UNSANDBOXED=1" >&2
+elif [ -n "${FUSION_PANEL_REPO:-}" ]; then
+  if workspace="$(fusion_panel_workspace "$FUSION_PANEL_REPO" "$scratch/repo")"; then
+    cwd="$workspace"
+    echo "[run_antigravity.sh] WORKSPACE=snapshot-UNSANDBOXED (at $cwd) — operator opted in via" >&2
+    echo "[run_antigravity.sh] FUSION_PANEL_REPO_UNSANDBOXED=1; this seat has code access WITHOUT egress control." >&2
+  else
+    workspace=""
+    echo "[run_antigravity.sh] WORKSPACE=none — could not build a snapshot from '$FUSION_PANEL_REPO'; this" >&2
+    echo "[run_antigravity.sh] seat answers from the packet ALONE. Disclose that in the audit trail." >&2
+  fi
+fi
 
 prompt="$(cat "$prompt_abs")"
 prompt_bytes="$(wc -c < "$prompt_abs" | tr -d ' ')"
@@ -63,7 +96,7 @@ agy_args=(
 timeout_secs="${FUSION_PANEL_TIMEOUT:-600}"
 # Mark the panelist process tree so the recursion guard refuses any nested fusion invocation.
 export FUSION_PANEL_CHILD=1
-( cd "$scratch" && fusion_run_with_timeout "$timeout_secs" agy "${agy_args[@]}" < /dev/null ) > "$out_abs" 2> "$scratch/agy.err"
+( cd "$cwd" && fusion_run_with_timeout "$timeout_secs" agy "${agy_args[@]}" < /dev/null ) > "$out_abs" 2> "$scratch/agy.err"
 status=$?
 
 if [ $status -eq 124 ] || [ $status -eq 143 ]; then

@@ -42,7 +42,11 @@ bash <skill-root>/scripts/run_triple_fusion.sh "$out/prompt.md" "$out" medium
 ```
 
 In the **same turn** (while that runs), spawn the **Claude panelist** yourself via the `Agent`/`Task`
-tool (`subagent_type: general-purpose`) with the *same* prompt — so all three run at once. The script
+tool (`subagent_type: general-purpose`, **`model: opus`**) with the *same* prompt — so all three run at
+once. Pin the model: an unpinned subagent inherits the session's, so a downgraded session would quietly
+seat a weaker panelist while the answer still reports PREMIUM. This seat **analyzes**, so it gets the
+analysis tier — the retrieval-side subagent (`context-discovery.md`) is pinned the other way, to a fast
+model, because its floor is the evidence gate rather than the model's judgment. The script
 cannot spawn Claude, and **only you can judge** (the pipeline can't be reversed). For `CLAUDE_ONLY`, spawn
 **two** cold Claude subagents.
 

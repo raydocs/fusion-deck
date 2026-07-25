@@ -32,7 +32,8 @@ bash <skill-root>/scripts/run_panel.sh --mode ultra_two_round "$out/prompt.md" "
 Hard-fail unless PREMIUM or `FUSION_ALLOW_DEGRADED=1`; on exit 13 STOP and disclose the realized `PANEL_STATE` from the manifest — never silently continue (`references/degraded-mode.md`).
 
 In the same turn, spawn **two cold Claude panelists** with the same prompt (the manifest's
-`CLAUDE_PANELISTS=2` confirms the count). Ask every panelist for the answer/recommendation and use the
+`CLAUDE_PANELISTS=2` confirms the count), both pinned to **`model: opus`** — see `/fusion` Step 1 for why
+an unpinned seat is a silent downgrade. Ask every panelist for the answer/recommendation and use the
 standard five-line footer from `references/panel-prompt.md`.
 
 **Checkpoint before ending this turn: BOTH the backgrounded Bash call AND the Claude spawn must have gone out in this same message; if only one did, launch the other immediately and disclose in the audit trail that the panel was not fully concurrent.**

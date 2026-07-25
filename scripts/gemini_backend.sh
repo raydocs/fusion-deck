@@ -11,6 +11,100 @@
 
 set -uo pipefail
 
+# The source-file extension list, shared by every context builder (codemap.sh walks it, fusion_map.sh
+# filters `git ls-files` by it). ONE list on purpose: two copies drift, and a stale copy that silently
+# omits a language produces an empty-but-successful map — the exact failure this skill forbids. Add a
+# language HERE, then add its grammar to codemap.sh's tree-sitter EXT/DEF_TYPES tables.
+#
+# Modifier-led languages (cs/swift/kt/php/scala) are load-bearing: they declare methods with no keyword,
+# so they are the ones a keyword-only heuristic silently drops. See references/codemap.md.
+FUSION_SOURCE_EXT="py sh bash js jsx ts tsx go rs rb java c h cc cpp hpp md cs swift kt kts m mm php scala lua"
+
+# True if PATH has one of the shared source extensions. Used by git-driven callers that never walk a
+# directory (so they get the same language coverage without duplicating the list).
+# Matched with ONE padded case test rather than `for e in $FUSION_SOURCE_EXT` — that loop relies on the
+# shell word-splitting an unquoted expansion, which bash does and zsh does not. Under zsh the list stayed
+# a single token and the function matched NOTHING, i.e. a silent empty map. These scripts all run under a
+# bash shebang so it never bit at runtime, but a check that can silently answer "no source files" for an
+# entire repo should not depend on which shell sourced it.
+fusion_is_source_path() {
+  local p="${1:-}"
+  case "$p" in *.*) ;; *) return 1 ;; esac
+  case " $FUSION_SOURCE_EXT " in *" ${p##*.} "*) return 0 ;; esac
+  return 1
+}
+
+# Build a DISPOSABLE, per-seat SNAPSHOT so a CLI panelist can read the code under review instead of
+# answering from memory — without ever touching the operator's repo, and without a path back to it.
+#
+#   fusion_panel_workspace <repo> <dest>   -> echoes <dest> on success, non-zero + nothing on failure
+#
+# NOT a git worktree. A worktree's `.git` is a FILE containing `gitdir: <real repo>/.git/worktrees/<id>`,
+# so one `git rev-parse --git-common-dir` walks a seat straight back to the operator's live checkout.
+# Measured from inside a "isolated" worktree: it read `.fusion/exports/` (prior judged answers, which
+# destroys the blindness invariant panel-prompt.md requires be enforced mechanically) and `.git/config`
+# (remote URLs, which can carry tokens). `git archive` writes content with no backlink of any kind.
+#
+# Three properties the snapshot must hold, each of which failed at least once:
+#   1. WRITES land nowhere real. The Antigravity seat runs with --dangerously-skip-permissions and has
+#      no read-only mode, so it must never be pointed at the live tree.
+#   2. NO BACKLINK, so blindness is structural rather than "happened not to look".
+#   3. Each seat gets its OWN dest, so no seat can see another's scratch.
+fusion_panel_workspace() {
+  local repo="${1:?fusion_panel_workspace <repo> <dest>}" dest="${2:?}"
+  local top patch
+  top="$(git -C "$repo" rev-parse --show-toplevel 2>/dev/null)" || return 1
+  [ -n "$top" ] || return 1
+  mkdir -p "$dest" 2>/dev/null || return 1
+  git -C "$top" archive HEAD 2>/dev/null | ( cd "$dest" && tar -xf - ) 2>/dev/null || return 1
+
+  patch="$dest.patch"
+  if git -C "$top" diff HEAD --binary > "$patch" 2>/dev/null && [ -s "$patch" ]; then
+    if ! ( cd "$dest" && git apply "$patch" ) 2>/dev/null \
+       && ! ( cd "$dest" && patch -p1 --silent < "$patch" ) 2>/dev/null; then
+      # Never claim a fidelity we did not achieve: say so, and let the caller disclose it.
+      echo "[fusion_panel_workspace] could not apply the working-tree diff — the snapshot is at HEAD," >&2
+      echo "[fusion_panel_workspace] so it does NOT contain uncommitted changes. Disclose this." >&2
+    fi
+  fi
+  rm -f "$patch"
+
+  # Untracked-but-not-ignored files are part of an `uncommitted` review and no diff carries them.
+  #   - .fusion/ is skipped unconditionally: manifests and exported judgments from PRIOR runs, which a
+  #     seat must not anchor on. Do not rely on the target repo's .gitignore; most repos have no rule.
+  #   - SYMLINKS ARE REFUSED. `[ -f ]` and plain `cp` both FOLLOW links, so an untracked
+  #     `key.py -> ~/.ssh/id_rsa` had its CONTENT copied into a directory whose entire purpose is to be
+  #     handed to an external model. Verified exfiltration, not a hypothetical.
+  ( cd "$top" && git ls-files -o --exclude-standard -z ) 2>/dev/null \
+    | while IFS= read -r -d '' p; do
+        case "$p" in .fusion/*|*/.fusion/*) continue ;; esac
+        if [ -L "$top/$p" ]; then
+          echo "[fusion_panel_workspace] refusing untracked symlink '$p' (it can point outside the repo)." >&2
+          continue
+        fi
+        [ -f "$top/$p" ] || continue
+        mkdir -p "$dest/$(dirname "$p")" 2>/dev/null
+        cp "$top/$p" "$dest/$p" 2>/dev/null
+      done
+
+  # Give the seat a working `git` again — a FRESH standalone history, no remote, no path to the original.
+  # `git grep` / `git ls-files` genuinely help a reviewer; a backlink does not.
+  ( cd "$dest" && git init -q . && git add -A \
+      && git -c user.email=panel@fusion -c user.name=panel commit -qm "panel snapshot" ) >/dev/null 2>&1
+
+  printf '%s\n' "$dest"
+}
+
+# Remove a workspace made by fusion_panel_workspace. A snapshot registers NOTHING in the operator's repo,
+# so removal is a plain rm — unlike a worktree there is no admin data to strand when a run is interrupted
+# before its trap fires.
+fusion_panel_workspace_cleanup() {
+  local repo="${1:-}" dest="${2:-}"
+  [ -n "$dest" ] || return 0
+  rm -rf "$dest" "$dest.patch" 2>/dev/null
+  return 0
+}
+
 # Run a command under a hard time limit (seconds). Portable: timeout/gtimeout when present, else a
 # bash watchdog. The watchdog TERMs first (KILL only after a grace period), and on the normal path we
 # kill the watchdog's own children too so no orphan `sleep` outlives the probe.

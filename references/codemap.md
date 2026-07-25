@@ -36,16 +36,34 @@ hung tool can't wedge the run — same portable watchdog as `detect_panel.sh`, s
 than emitting the BSD tool's unreliable cross-reference as if it were the real CTAGS tier — an honest
 degrade, not a silent half-capability.
 
-## The disclosure line
+## The disclosure lines
 
-Every run ends with one greppable line naming the tier that **actually ran**:
+Every run ends with two greppable lines — how much was actually mapped, and the tier that **actually ran**:
 
 ```
+CODEMAP_FILES=<n>
 CODEMAP_STATE=TREESITTER | CTAGS | REGEX
 ```
 
 This is the codemap's analogue of `PANEL_STATE`. A `/fusion-context` build that used codemaps records the
 realized `CODEMAP_STATE` so the pack reader knows whether the signatures are parser-exact or grep-approximate.
+
+**An empty map is a failure, not a result.** If no source file was collected, `codemap.sh` prints
+`CODEMAP_FILES=0`, says why on stderr, and **exits 3** — it never emits a codemap-shaped artifact with no
+map in it. The two ways to get there, both remediable: the language's extension is unmapped (add it to
+`collect_files`, and to `EXT`/`DEF_TYPES` for the tree-sitter tier), or the path was pruned as build output
+(pass the files explicitly — explicit FILE arguments bypass the prune list). Callers must treat exit 3 as
+"no context was produced" and say so, exactly as a missing panelist is reported ABSENT rather than silently
+counted as agreement.
+
+## Language coverage
+
+Directory walks cover the keyword-declared languages plus the **modifier-led** ones (C#, Swift, Kotlin,
+Objective-C, PHP, Scala, Lua). Modifier-led languages matter disproportionately because they declare methods
+with **no keyword at all** — `public void Bind(Actor a)` — so a keyword-only signature pattern maps their
+types and silently misses every method. The REGEX floor therefore accepts an optional repeated modifier
+prefix before the keyword group, and separately matches `<modifier>+ <return-type> <name>(`; requiring at
+least one modifier there keeps `if (` / `while (` and ordinary call sites out of the map.
 
 ## Forcing a tier — `FUSION_CODEMAP_TIER`
 

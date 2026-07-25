@@ -135,6 +135,12 @@ manifest_tmp="$manifest.tmp"
   echo "GEMINI_OUT=$gemini_out GEMINI_RC=$gemini_rc"
   echo "CODEX_SECONDS=$codex_secs CODEX_OUT_BYTES=$codex_bytes"
   echo "GEMINI_SECONDS=$gemini_secs GEMINI_OUT_BYTES=$gemini_bytes"
+  # Whether a seat could READ THE CODE, lifted out of its log and into the manifest. judge-rubric.md
+  # weights a panelist that read a primary source above one reasoning from the packet alone, and every
+  # command file tells the judge to read the MANIFEST — nothing tells it to read the runner logs. Left
+  # only in a log, the default outcome is a silent over-claim about what each seat actually saw.
+  echo "CODEX_WORKSPACE=$(sed -n 's/.*WORKSPACE=\([^ ]*\).*/\1/p' "$out_dir/codex.log" 2>/dev/null | tail -1 | tr -d '\n')"
+  echo "GEMINI_WORKSPACE=$(sed -n 's/.*WORKSPACE=\([^ ]*\).*/\1/p' "$out_dir/gemini.log" 2>/dev/null | tail -1 | tr -d '\n')"
   echo "# NOTE: Claude panelists + judge are added by the orchestrator, not this script."
 } > "$manifest_tmp"
 

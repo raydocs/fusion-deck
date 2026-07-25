@@ -24,9 +24,13 @@ pack. Ask only when it's load-bearing; otherwise state the assumption and procee
 
 ## Step 1 — Explore (the subagent)
 
-Dispatch ONE scoped Explore/general-purpose subagent (`Agent`/`Task` tool). Its brief: given the task,
-find the files that matter and **record the evidence for each**. It does not edit anything and does not
-spawn its own subagents (one level of fan-out — see `orchestration-rubric.md`). Steer it toward concrete
+Dispatch ONE scoped Explore/general-purpose subagent (`Agent`/`Task` tool) with an **explicit fast model
+(`model: sonnet`)** — not the inherited session model. Discovery is high-volume mechanical work (grep,
+follow an import edge, record the hit); its quality floor is enforced by the **evidence gate**, not by the
+model's judgment, so a stronger model buys little here and an unpinned subagent silently spends the
+session's top-tier model on `grep`. Its brief: given the task, find the files that matter and **record the
+evidence for each**. It does not edit anything and does not spawn its own subagents (one level of fan-out —
+see `orchestration-rubric.md`). Steer it toward concrete
 discovery moves, each of which *is* an evidence kind:
 
 - **grep** — a symbol, error string, route, or config key the task names → `"grep:<match>"`.

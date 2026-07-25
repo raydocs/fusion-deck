@@ -64,6 +64,7 @@ required=(
   scripts/run_triple_fusion.sh scripts/smoke_test.sh scripts/lint_contract.py scripts/fusion_ledger.py
   scripts/route_task.py scripts/assert_panel.sh scripts/run_panel.sh scripts/detect_verifiers.sh
   scripts/run_verifier.sh scripts/codemap.sh scripts/selection_lint.py scripts/fusion_worktree.sh
+  scripts/fusion_map.sh
   references/panel-prompt.md references/judge-rubric.md references/workflow-contract.md
   references/context-pack-format.md references/orchestration-rubric.md
   references/subagent-prompt-template.md references/verifier-prompt-template.md
@@ -281,6 +282,355 @@ cm_fake="$(PATH="$cm_ts_dir:$PATH" bash "$root/scripts/codemap.sh" "$root/script
 if [ "$cm_base" = "$cm_fake" ]; then ok "codemap.sh: a bare tree-sitter CLI does not change the tier ($cm_fake)"
 else bad "codemap.sh: a bare tree-sitter CLI changed the tier ($cm_base -> $cm_fake) — over-claim"; fi
 rm -rf "$cm_ts_dir"
+
+# An EMPTY map must be a loud failure, not a silent exit-0 success. The regression this guards: an
+# unmapped language (or a fully-pruned path) yielded a codemap-shaped artifact with no signatures in it,
+# and /fusion-review's caller-context fallback shipped that to the panel as "context".
+cm_empty_dir="$(mktemp -d "${TMPDIR:-/tmp}/pfo_cmempty.XXXXXX")"
+: > "$cm_empty_dir/notes.rtf"
+cm_empty_out="$(bash "$root/scripts/codemap.sh" "$cm_empty_dir" 2>/dev/null)"; cm_empty_rc=$?
+if [ "$cm_empty_rc" -ne 0 ]; then ok "codemap.sh: empty map exits non-zero ($cm_empty_rc)"
+else bad "codemap.sh: empty map exited 0 — silent empty success"; fi
+echo "$cm_empty_out" | grep -q '^CODEMAP_FILES=0' && ok "codemap.sh: empty map discloses CODEMAP_FILES=0" \
+  || bad "codemap.sh: empty map missing CODEMAP_FILES=0"
+rm -rf "$cm_empty_dir"
+
+# Modifier-led languages (C#/Java/Swift/Kotlin) declare methods with NO keyword. A keyword-only signature
+# pattern mapped zero methods there while still exiting 0 — the same silent-empty class as above.
+cm_cs_dir="$(mktemp -d "${TMPDIR:-/tmp}/pfo_cmcs.XXXXXX")"
+cat > "$cm_cs_dir/Probe.cs" <<'CSEOF'
+using UnityEngine;
+public class Probe : MonoBehaviour {
+    public void Bind(Actor actor) { }
+    private static float Clamp01(float v) => Mathf.Clamp01(v);
+}
+CSEOF
+cm_cs="$(FUSION_CODEMAP_TIER=regex bash "$root/scripts/codemap.sh" "$cm_cs_dir" 2>/dev/null)"
+for cs_sym in 'class Probe' 'Bind(' 'Clamp01('; do
+  echo "$cm_cs" | grep -qF "$cs_sym" && ok "codemap.sh maps C# '$cs_sym'" \
+    || bad "codemap.sh missed C# '$cs_sym' — modifier-led declarations unmapped"
+done
+rm -rf "$cm_cs_dir"
+
+# /fusion-review's caller-context step must use `git grep` (tracked files only): `grep -r` walks .git and
+# gitignored build output and filters afterward — measured 17.7x slower here, orders of magnitude on a
+# repo with a multi-GB build dir.
+echo "-- fusion_map: cache correctness + honest degrade --"
+# Build a throwaway repo so these assertions never depend on the host repo's working-tree state.
+fm_repo="$(mktemp -d "${TMPDIR:-/tmp}/pfo_fmrepo.XXXXXX")"
+fm_out="$(mktemp -d "${TMPDIR:-/tmp}/pfo_fmout.XXXXXX")"
+(
+  cd "$fm_repo" || exit 1
+  git init -q .
+  mkdir -p src
+  printf 'def alpha():\n    pass\n'  > src/a.py
+  printf 'def beta():\n    pass\n'   > src/b.py
+  printf 'public class C { public void Go() { } }\n' > src/C.cs
+  # Deliberately the LARGEST block in the fixture: the drop-order guard below is only meaningful if
+  # prose is big enough that a binding budget must choose between it and the source blocks.
+  { printf '# Doc title\n\n'; i=1; while [ $i -le 30 ]; do printf '## Section %s\n\nprose\n\n' "$i"; i=$((i+1)); done; } > notes.md
+  git add -A && git -c user.email=a@b -c user.name=a commit -qm init
+) >/dev/null 2>&1
+fm() { ( cd "$fm_repo" && bash "$root/scripts/fusion_map.sh" "$fm_out" "$@" 2>/dev/null ); }
+fm_get() { printf '%s\n' "$1" | grep "^$2=" | cut -d= -f2; }
+
+fm_cold="$(fm)"
+[ "$(fm_get "$fm_cold" CACHE_MISS)" -gt 0 ] && ok "fusion_map: cold run populates the cache (MISS>0)" \
+  || bad "fusion_map: cold run reported no cache misses"
+fm_warm="$(fm)"
+if [ "$(fm_get "$fm_warm" CACHE_MISS)" -eq 0 ] && [ "$(fm_get "$fm_warm" CACHE_HIT)" -gt 0 ]; then
+  ok "fusion_map: warm run is a full cache hit"
+else
+  bad "fusion_map: warm run did not hit the cache (HIT=$(fm_get "$fm_warm" CACHE_HIT) MISS=$(fm_get "$fm_warm" CACHE_MISS))"
+fi
+
+# THE regression this guards: `git ls-files -s` reports the INDEX sha, so an unstaged edit left the cache
+# key unchanged and the map silently described the pre-edit code — under `/fusion-review uncommitted`,
+# the most common scope of all. The working tree must be re-hashed.
+# The edit adds a SIGNATURE (codemap emits signatures, never bodies), so the map's content can be checked.
+printf 'def alpha():\n    pass\n\ndef alpha_unstaged():\n    pass\n' > "$fm_repo/src/a.py"
+fm_dirty="$(fm)"
+if [ "$(fm_get "$fm_dirty" CACHE_MISS)" -eq 1 ]; then
+  ok "fusion_map: an unstaged edit invalidates exactly one cache entry"
+else
+  bad "fusion_map: unstaged edit produced MISS=$(fm_get "$fm_dirty" CACHE_MISS) (want 1) — stale-index bug"
+fi
+grep -q 'alpha_unstaged' "$fm_out/map.md" 2>/dev/null \
+  && ok "fusion_map: the map reflects working-tree content, not the index" \
+  || bad "fusion_map: the map does not reflect the unstaged edit"
+
+# An untracked (not ignored) source file is part of an `uncommitted` review and must appear.
+printf 'def gamma():\n    pass\n' > "$fm_repo/src/new.py"
+fm_new="$(fm)"
+grep -q 'src/new.py' "$fm_out/map.md" 2>/dev/null \
+  && ok "fusion_map: untracked source files appear in the map" \
+  || bad "fusion_map: untracked source file missing from the map"
+rm -f "$fm_repo/src/new.py"
+
+# Truncation must be DISCLOSED, and file_map must stay complete — a file dropped from the codemap is
+# still named, so a seat knows it exists and can read it.
+fm_trunc="$( cd "$fm_repo" && FUSION_MAP_BUDGET_TOKENS=1 bash "$root/scripts/fusion_map.sh" "$fm_out" 2>/dev/null )"
+if [ "$(fm_get "$fm_trunc" MAP_STATE)" = "TRUNCATED" ] && [ "$(fm_get "$fm_trunc" MAP_DROPPED)" -gt 0 ]; then
+  ok "fusion_map: over-budget run discloses MAP_STATE=TRUNCATED + MAP_DROPPED"
+else
+  bad "fusion_map: over-budget run did not disclose truncation"
+fi
+grep -q 'src/C.cs' "$fm_out/map.md" 2>/dev/null \
+  && ok "fusion_map: file_map stays complete under truncation" \
+  || bad "fusion_map: truncation removed a path from file_map — files must never be hidden"
+
+# The byte ceiling must bind, because the real constraint is the TIGHTEST seat's prompt transport (the
+# Antigravity seat passes its prompt via argv), not the token budget. A map sized to codex's looser cap
+# silently costs the panel its Gemini seat.
+fm_bytes="$( cd "$fm_repo" && FUSION_MAP_MAX_BYTES=900 FUSION_MAP_BUDGET_TOKENS=999999 \
+             bash "$root/scripts/fusion_map.sh" "$fm_out" 2>/dev/null )"
+if [ -f "$fm_out/map.md" ] && [ "$(wc -c < "$fm_out/map.md" | tr -d ' ')" -le 900 ]; then
+  ok "fusion_map: FUSION_MAP_MAX_BYTES caps the map even when the token budget is huge"
+else
+  bad "fusion_map: byte ceiling did not bind (map.md $(wc -c < "$fm_out/map.md" 2>/dev/null | tr -d ' ') > 900)"
+fi
+# file_map alone over the ceiling: refuse loudly (exit 4). Truncating file_map would hide that files
+# exist; emitting anyway would kill a seat at launch. Neither is an acceptable silent outcome.
+( cd "$fm_repo" && FUSION_MAP_MAX_BYTES=10 bash "$root/scripts/fusion_map.sh" "$fm_out" >/dev/null 2>&1 ); fm_rc=$?
+[ "$fm_rc" -eq 4 ] && ok "fusion_map: file_map over the byte ceiling exits 4 (OVERSIZE)" \
+  || bad "fusion_map: oversize file_map exited $fm_rc (want 4)"
+
+# Density tiers. Each of these was a measured defect, not a hypothetical:
+#   - markdown mapped to an EMPTY block while file_map still marked it ' +' (claiming signatures that did
+#     not exist) — 150 such blocks in a 498-file repo;
+#   - once markdown emitted outlines, append-only docs (session logs) began crowding real source out of
+#     the byte budget, so code is ordered ahead of prose;
+#   - focus files got signatures only, when the body is what tells a reviewer the change fits the file.
+fm_tiers="$(fm src/a.py)"
+grep -q '# Doc title' "$fm_out/map.md" 2>/dev/null \
+  && ok "fusion_map: markdown contributes a heading outline, not an empty block" \
+  || bad "fusion_map: markdown produced no outline"
+if ! awk '/^## codemap/{c=1} c&&/^File: /{p=$2; getline l; if (l=="" || l=="Imports:") {getline l2; if (l2=="" ) {print p; exit 1}}}' \
+       "$fm_out/map.md" >/dev/null 2>&1; then
+  bad "fusion_map: an empty codemap block survived into the map"
+else
+  ok "fusion_map: no empty codemap blocks (they degrade to the tree-only tier)"
+fi
+printf '%s\n' "$fm_tiers" | grep -q '^MAP_TREEONLY=' \
+  && ok "fusion_map: discloses MAP_TREEONLY separately from MAP_DROPPED" \
+  || bad "fusion_map: MAP_TREEONLY not disclosed — 'nothing to show' collapsed into 'budget dropped'"
+grep -q 'full content — focus file' "$fm_out/map.md" 2>/dev/null \
+  && ok "fusion_map: a focus file is emitted at the full tier" \
+  || bad "fusion_map: focus file got signatures only — the body is what shows the change fits"
+# Code must outrank prose in the drop order, or a docs-heavy repo starves the map of source.
+# Assert against the ## codemap SECTION only: the previous form grepped the whole map.md, and file_map is
+# emitted complete by design, so it was green no matter how badly the drop order regressed.
+# The invariant is ORDERING, so assert it directly rather than hunting a budget that happens to bite:
+# every source block must precede every prose block, so prose is what the byte ceiling eats first.
+( cd "$fm_repo" && bash "$root/scripts/fusion_map.sh" "$fm_out" ) >/dev/null 2>&1
+fm_last_src="$(awk '/^## codemap/,0' "$fm_out/map.md" | grep -n '^File: src/' | tail -1 | cut -d: -f1)"
+fm_first_prose="$(awk '/^## codemap/,0' "$fm_out/map.md" | grep -n '^File: notes.md' | head -1 | cut -d: -f1)"
+if [ -n "$fm_last_src" ] && [ -n "$fm_first_prose" ] && [ "$fm_last_src" -lt "$fm_first_prose" ]; then
+  ok "fusion_map: every source block precedes every prose block (prose is dropped first)"
+else
+  bad "fusion_map: drop order wrong — last source block at $fm_last_src, first prose at $fm_first_prose"
+fi
+# And a budget inside the band where truncation actually happens must drop the prose block, not source.
+( cd "$fm_repo" && FUSION_MAP_MAX_BYTES=900 bash "$root/scripts/fusion_map.sh" "$fm_out" ) >/dev/null 2>&1
+fm_cm="$(awk '/^## codemap/,0' "$fm_out/map.md" 2>/dev/null)"
+if printf '%s' "$fm_cm" | grep -q 'File: src/' && ! printf '%s' "$fm_cm" | grep -q 'File: notes.md'; then
+  ok "fusion_map: a binding budget keeps source and drops prose"
+else
+  bad "fusion_map: binding budget kept $(printf '%s' "$fm_cm" | grep -c 'File: src/') source / $(printf '%s' "$fm_cm" | grep -c 'File: notes.md') prose block(s)"
+fi
+# OVERSIZE must not leave a previous run's map.md consumable in the out dir.
+( cd "$fm_repo" && FUSION_MAP_MAX_BYTES=10 bash "$root/scripts/fusion_map.sh" "$fm_out" ) >/dev/null 2>&1
+[ -e "$fm_out/map.md" ] && bad "fusion_map: OVERSIZE left a stale map.md the caller could consume" \
+                        || ok "fusion_map: OVERSIZE removes any stale map.md"
+
+# Deletions must leave the map. The old blob SHA stayed a cache HIT, so a deleted file kept both its
+# file_map entry and a full signature block — signatures for functions that no longer exist.
+printf 'def doomed():\n    pass\n' > "$fm_repo/src/gone.py"
+( cd "$fm_repo" && git add -A && git -c user.email=a@b -c user.name=a commit -qm add-gone ) >/dev/null 2>&1
+fm_del="$(fm)"; rm -f "$fm_repo/src/gone.py"; fm_del="$(fm)"
+if grep -q 'src/gone.py\|doomed' "$fm_out/map.md" 2>/dev/null; then
+  bad "fusion_map: a deleted file is still in the map (stale cache hit on its old blob)"
+else
+  ok "fusion_map: a deleted file leaves the map entirely"
+fi
+
+# The cache key must carry the TIER, and the run must report the tier that actually produced the blocks.
+# A warm run once reported CODEMAP_STATE=CACHED — a fourth state documented nowhere.
+fm_warm2="$(fm)"
+case "$(fm_get "$fm_warm2" CODEMAP_STATE)" in
+  TREESITTER|CTAGS|REGEX) ok "fusion_map: warm runs report a real tier, not an undocumented state" ;;
+  *) bad "fusion_map: warm run reported CODEMAP_STATE=$(fm_get "$fm_warm2" CODEMAP_STATE) — not in the contract" ;;
+esac
+if bash "$root/scripts/codemap.sh" --print-tier 2>/dev/null | grep -q '^CODEMAP_STATE='; then
+  ok "codemap.sh --print-tier lets callers key a cache without re-deriving tier logic"
+else
+  bad "codemap.sh --print-tier missing — cache keying would have to duplicate tier detection"
+fi
+
+# Two files with identical content share a blob SHA. Caching the `File:` header with the body made the
+# second one inherit the first one's path.
+printf 'def same():\n    pass\n' > "$fm_repo/src/one.py"
+printf 'def same():\n    pass\n' > "$fm_repo/src/two.py"
+fm_dup="$(fm)"
+if [ "$(grep -c '^File: src/one.py$' "$fm_out/map.md")" = 1 ] && [ "$(grep -c '^File: src/two.py$' "$fm_out/map.md")" = 1 ]; then
+  ok "fusion_map: identical-content files keep their own paths (cached body is path-independent)"
+else
+  bad "fusion_map: same-blob files collided — one inherited the other's path"
+fi
+rm -f "$fm_repo/src/one.py" "$fm_repo/src/two.py"
+
+# The cache must not be written into the repo being described.
+if [ -e "$fm_repo/.fusion" ]; then
+  bad "fusion_map: wrote .fusion into the target repo — a read-side builder must not mutate the tree"
+else
+  ok "fusion_map: leaves no cache artifacts inside the target repo"
+fi
+
+# Honest degrade: not a repo => exit 2 + NO_GIT; a repo with no source => exit 3 (never an empty success).
+fm_nogit="$(mktemp -d "${TMPDIR:-/tmp}/pfo_fmng.XXXXXX")"
+( cd "$fm_nogit" && bash "$root/scripts/fusion_map.sh" "$fm_nogit" >/dev/null 2>&1 ); fm_rc=$?
+[ "$fm_rc" -eq 2 ] && ok "fusion_map: outside a git repo exits 2" || bad "fusion_map: outside a git repo exited $fm_rc (want 2)"
+( cd "$fm_nogit" && git init -q . && echo x > README.nosrc && git add -A \
+    && git -c user.email=a@b -c user.name=a commit -qm x \
+    && bash "$root/scripts/fusion_map.sh" "$fm_nogit" >/dev/null 2>&1 ); fm_rc=$?
+[ "$fm_rc" -eq 3 ] && ok "fusion_map: a source-free repo exits 3 (no empty map)" \
+  || bad "fusion_map: source-free repo exited $fm_rc (want 3) — silent empty map"
+rm -rf "$fm_repo" "$fm_out" "$fm_nogit"
+
+# The extension list must exist in exactly ONE place; a second copy drifts and silently drops a language.
+# Pattern built from fragments so this guard never matches its own source (same trick as the retired-label
+# guards above).
+# ...and the membership test must not depend on the sourcing shell's word-splitting rules: under zsh the
+# old `for e in $LIST` form matched nothing, which reads as "this repo has no source files".
+if command -v zsh >/dev/null 2>&1; then
+  if zsh -c ". '$root/scripts/gemini_backend.sh'; fusion_is_source_path a.py && fusion_is_source_path b.cs" >/dev/null 2>&1; then
+    ok "fusion_is_source_path works under zsh as well as bash (no word-split dependency)"
+  else
+    bad "fusion_is_source_path matches nothing under zsh — silent empty map for a whole repo"
+  fi
+fi
+_fm_ext_pat="$(printf '%s_SOURCE_EXT=' 'FUSION')"
+if [ "$(grep -rl "$_fm_ext_pat" "$root/scripts" | wc -l | tr -d ' ')" -eq 1 ]; then
+  ok "fusion_map/codemap share one FUSION_SOURCE_EXT definition"
+else
+  bad "FUSION_SOURCE_EXT defined in more than one file — the lists will drift"
+fi
+
+echo "-- model tiering: retrieval vs analysis --"
+# The split is load-bearing, and BOTH directions fail silently when unpinned (an Agent subagent inherits
+# the session model): an unpinned panelist quietly seats a weaker model while the run still reports
+# PREMIUM; an unpinned discovery subagent spends the top tier on grep.
+for c in fusion fusion-ultra; do
+  grep -q 'model: opus' "$root/commands/$c.md" \
+    && ok "$c.md pins the analysis seat to opus" \
+    || bad "$c.md spawns a Claude panelist without pinning the model — silent downgrade risk"
+done
+grep -q 'model: sonnet' "$root/references/context-discovery.md" \
+  && ok "context-discovery.md pins the retrieval subagent to a fast model" \
+  || bad "context-discovery.md leaves the discovery subagent unpinned — top-tier model doing grep"
+# Caller context must be SLICES, not an index: a bare `git grep -n` yields one line per hit, from which
+# no reviewer can judge how the symbol is used.
+grep -qE '^for s in \$syms; do +git grep -nw -C[0-9]' "$root/commands/fusion-review.md" \
+  && ok "fusion-review.md caller context carries surrounding lines (slices, not an index)" \
+  || bad "fusion-review.md caller context has no -C window — one line per hit is not reviewable"
+
+echo "-- panel workspace isolation --"
+# A CLI seat pointed at a disposable worktree can read the code under review. Three properties make that
+# safe; each has burned us once, so each is asserted.
+ws_repo="$(mktemp -d "${TMPDIR:-/tmp}/pfo_wsrepo.XXXXXX")"
+ws_dest="$(mktemp -d "${TMPDIR:-/tmp}/pfo_wsdest.XXXXXX")/repo"
+(
+  cd "$ws_repo" || exit 1
+  git init -q .
+  printf 'def committed():\n    pass\n' > a.py
+  git add -A && git -c user.email=a@b -c user.name=a commit -qm init
+  printf 'def committed():\n    pass\n\ndef uncommitted_edit():\n    pass\n' > a.py   # unstaged edit
+  printf 'def brand_new():\n    pass\n' > b.py                                        # untracked
+  mkdir -p .fusion/exports && printf 'PRIOR JUDGED ANSWER\n' > .fusion/exports/old.md  # must NOT leak
+  printf 'SECRET-KEY-MATERIAL\n' > ../outside_secret                                     # outside the repo
+  ln -s "$(cd .. && pwd)/outside_secret" leak.py                                          # untracked symlink
+) >/dev/null 2>&1
+( . "$root/scripts/gemini_backend.sh"; fusion_panel_workspace "$ws_repo" "$ws_dest" ) >/dev/null 2>&1
+ws_rc=$?
+if [ "$ws_rc" -eq 0 ] && [ -d "$ws_dest" ]; then
+  ok "fusion_panel_workspace: builds a disposable worktree"
+  grep -q 'uncommitted_edit' "$ws_dest/a.py" 2>/dev/null \
+    && ok "fusion_panel_workspace: uncommitted changes are present (seat reviews what the packet describes)" \
+    || bad "fusion_panel_workspace: workspace is at HEAD — the seat would review pre-edit code"
+  [ -f "$ws_dest/b.py" ] \
+    && ok "fusion_panel_workspace: untracked source files are present" \
+    || bad "fusion_panel_workspace: untracked file missing — a new file under review would be invisible"
+  # THE blindness leak: .fusion/exports holds PRIOR judged answers. A seat that reads one is no longer
+  # independent, and panel-prompt.md requires blindness be structural, not hoped-for.
+  [ -e "$ws_dest/.fusion" ] \
+    && bad "panel workspace: .fusion leaked into the seat workspace — prior judgments readable" \
+    || ok "panel workspace: .fusion is absent"
+  # ...and absence is not enough: a git WORKTREE's .git is a file pointing at the real repo, so one
+  # `git rev-parse --git-common-dir` walked a seat back to the live checkout and read .fusion/exports
+  # and .git/config (remote URLs can carry tokens). The snapshot must resolve only to itself.
+  ws_common="$( cd "$ws_dest" && git rev-parse --git-common-dir 2>/dev/null )"
+  # -P on both sides: macOS mktemp yields /var/... while pwd resolves to /private/var/..., and a
+  # symlink-vs-real mismatch would read as a leak.
+  ws_back="$( cd "$ws_dest" && cd "$(dirname "$(git rev-parse --git-common-dir 2>/dev/null)")" 2>/dev/null && pwd -P )"
+  ws_self="$( cd "$ws_dest" && pwd -P )"
+  if [ "$ws_back" = "$ws_self" ]; then
+    ok "panel workspace: no backlink — git resolves to the snapshot itself, not the operator's repo"
+  else
+    bad "panel workspace: git in the snapshot resolves to '$ws_back' (want '$ws_self') — a seat can walk back to the real repo"
+  fi
+  ( cd "$ws_dest" && git config --get remote.origin.url ) >/dev/null 2>&1 \
+    && bad "panel workspace: the snapshot carries a remote URL (can contain a token)" \
+    || ok "panel workspace: snapshot has no remote"
+  # Untracked SYMLINKS must be refused: [ -f ] and cp both FOLLOW them, so `key.py -> ~/.ssh/id_rsa`
+  # had its CONTENT copied into a directory whose entire purpose is to be handed to an external model.
+  [ -e "$ws_dest/leak.py" ] \
+    && bad "panel workspace: an untracked symlink was dereferenced into the seat workspace (exfiltration)" \
+    || ok "panel workspace: untracked symlinks are refused, not dereferenced"
+  ( . "$root/scripts/gemini_backend.sh"; fusion_panel_workspace_cleanup "$ws_repo" "$ws_dest" ) >/dev/null 2>&1
+  [ -e "$ws_dest" ] && bad "fusion_panel_workspace_cleanup left the worktree behind" \
+                    || ok "fusion_panel_workspace_cleanup removes the worktree"
+else
+  bad "fusion_panel_workspace: could not build a workspace (rc=$ws_rc)"
+fi
+rm -rf "$ws_repo" "$ws_dest"
+
+# Both CLI runners must route through the shared helper — a runner that hardcodes an empty scratch dir
+# silently keeps its seat blind while the panel reports PREMIUM.
+for r in run_codex.sh run_antigravity.sh; do
+  grep -q 'fusion_panel_workspace' "$root/scripts/$r" \
+    && ok "$r honors FUSION_PANEL_REPO via the shared workspace helper" \
+    || bad "$r does not build a panel workspace — that seat answers from the packet alone"
+done
+# Code access and an egress channel must never be granted together. codex gets the repo only under
+# FUSION_NO_WEB=1 (read-only sandbox, no web tool); agy exposes NO sandbox or network switch at all, so
+# it is packet-only unless the operator explicitly accepts the risk.
+if grep -q 'FUSION_PANEL_REPO' "$root/scripts/run_codex.sh" && grep -qE 'no_web.*!=.*1|"\$no_web" != "1"' "$root/scripts/run_codex.sh"; then
+  ok "run_codex.sh refuses repo access without FUSION_NO_WEB=1"
+else
+  bad "run_codex.sh would grant repo access alongside a web tool — an exfiltration path"
+fi
+if grep -q 'FUSION_PANEL_REPO_UNSANDBOXED' "$root/scripts/run_antigravity.sh"; then
+  ok "run_antigravity.sh is packet-only unless the operator opts in (agy has no sandbox/network switch)"
+else
+  bad "run_antigravity.sh grants repo access to a seat with no egress control and no opt-in"
+fi
+
+# Directory walks must PRUNE build output, not filter it after descending. `! -path '*/Library/*'` still
+# stats every file inside a Unity Library/ (hundreds of thousands) before rejecting them.
+cm_prune_dir="$(mktemp -d "${TMPDIR:-/tmp}/pfo_cmprune.XXXXXX")"
+mkdir -p "$cm_prune_dir/node_modules/deep" "$cm_prune_dir/src"
+printf 'def real():\n    pass\n' > "$cm_prune_dir/src/real.py"
+printf 'def vendored():\n    pass\n' > "$cm_prune_dir/node_modules/deep/dep.py"
+cm_prune="$(bash "$root/scripts/codemap.sh" "$cm_prune_dir" 2>/dev/null)"
+if printf '%s' "$cm_prune" | grep -q 'src/real.py' && ! printf '%s' "$cm_prune" | grep -q 'node_modules'; then
+  ok "codemap.sh prunes build/vendor trees instead of descending into them"
+else
+  bad "codemap.sh walked a pruned directory (or missed real source)"
+fi
+grep -q '\-prune' "$root/scripts/codemap.sh" \
+  && ok "codemap.sh directory walk uses -prune" \
+  || bad "codemap.sh uses '! -path' — it descends into build trees before rejecting each file"
+rm -rf "$cm_prune_dir"
 
 echo "-- selection_lint behavior --"
 if python3 "$root/scripts/selection_lint.py" "$root/examples/selection.example.json" >/dev/null 2>&1; then

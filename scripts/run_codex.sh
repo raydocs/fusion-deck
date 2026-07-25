@@ -65,12 +65,36 @@ else
 fi
 
 scratch="$(mktemp -d "${TMPDIR:-/tmp}/pfo-codex.XXXXXX")"
-trap 'rm -rf "$scratch"' EXIT
+workspace=""
+trap 'fusion_panel_workspace_cleanup "${FUSION_PANEL_REPO:-}" "$workspace"; rm -rf "$scratch"' EXIT
+
+# With FUSION_PANEL_REPO set AND FUSION_NO_WEB=1, this seat reviews the actual code in a disposable
+# snapshot instead of an empty dir. Without either, the historical behavior is unchanged: empty scratch.
+# A failed or refused workspace is NEVER silently downgraded to "seat had repo access" — it says so.
+cwd="$scratch"
+if [ -n "${FUSION_PANEL_REPO:-}" ] && [ "$no_web" != "1" ]; then
+  # Code access and an egress channel must never be granted together. Without FUSION_NO_WEB=1 this seat
+  # runs `-s workspace-write -c tools.web_search=true`; adding the repo would let an instruction injected
+  # into the diff under review read the code AND post it out. /fusion-review always sets FUSION_NO_WEB=1;
+  # anything that does not, does not get the repo.
+  echo "[run_codex.sh] FUSION_PANEL_REPO ignored: repo access requires FUSION_NO_WEB=1 (read-only sandbox," >&2
+  echo "[run_codex.sh] no web tool). Granting code access alongside a web tool is an exfiltration path." >&2
+  echo "[run_codex.sh] WORKSPACE=none" >&2
+elif [ -n "${FUSION_PANEL_REPO:-}" ]; then
+  if workspace="$(fusion_panel_workspace "$FUSION_PANEL_REPO" "$scratch/repo")"; then
+    cwd="$workspace"
+    echo "[run_codex.sh] WORKSPACE=snapshot (disposable, at $cwd) — seat can read the code under review." >&2
+  else
+    workspace=""
+    echo "[run_codex.sh] WORKSPACE=none — could not build a snapshot from '$FUSION_PANEL_REPO'; this seat" >&2
+    echo "[run_codex.sh] answers from the packet ALONE. Disclose that in the audit trail." >&2
+  fi
+fi
 
 codex_args=(
   exec
   --skip-git-repo-check
-  --cd "$scratch"
+  --cd "$cwd"
 )
 if [ "$no_web" = "1" ]; then
   codex_args+=(-s read-only)

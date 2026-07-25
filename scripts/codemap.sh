@@ -80,19 +80,46 @@ case "$(printf '%s' "$forced" | tr '[:upper:]' '[:lower:]')" in
     fi ;;
 esac
 
+# `--print-tier`: resolve the tier and exit, doing no mapping. Callers that cache blocks must key on the
+# tier that produced them (a REGEX block reused after tree-sitter is installed is a silent fidelity lie),
+# and they must not re-derive availability themselves — a second copy of that logic would drift from this
+# one. Costs only the bounded availability probes.
+if [ "${1:-}" = "--print-tier" ]; then
+  echo "CODEMAP_STATE=$tier"
+  exit 0
+fi
+
 # Collect the source files to map: explicit files as-is; directories walked for common source extensions.
 # NUL-delimited throughout so paths with spaces survive.
+#
+# Directory walks PRUNE well-known build/vendor output (Library, Temp, obj, bin, build, dist, target,
+# vendor, __pycache__, .venv/venv) on top of .git/node_modules/.fusion*. Walking a gitignored multi-GB
+# build tree is the same silent-slowness bug as `grep -r` over `.git` — and none of it is source worth
+# mapping. An explicit FILE argument is always honored as-is, so a pruned path can still be forced in.
 collect_files() {
+  # Extension predicates come from the ONE shared list (FUSION_SOURCE_EXT in gemini_backend.sh) — a
+  # second copy here would drift and silently drop a language.
+  # read -ra, not `for e in $LIST`: the unquoted form depends on the shell doing word-splitting (bash
+  # does, zsh does not) — the same fragility fusion_is_source_path was rewritten to avoid.
+  local ext_args=() exts=() e first=1
+  read -ra exts <<< "$FUSION_SOURCE_EXT"
+  for e in "${exts[@]}"; do
+    if [ "$first" -eq 1 ]; then ext_args+=( -name "*.$e" ); first=0
+    else                        ext_args+=( -o -name "*.$e" ); fi
+  done
   for arg in "$@"; do
     if [ -f "$arg" ]; then
       printf '%s\0' "$arg"
     elif [ -d "$arg" ]; then
-      find "$arg" -type f \( \
-        -name '*.py'  -o -name '*.sh'  -o -name '*.bash' -o -name '*.js'  -o -name '*.jsx' -o \
-        -name '*.ts'  -o -name '*.tsx' -o -name '*.go'   -o -name '*.rs'  -o -name '*.rb'  -o \
-        -name '*.java' -o -name '*.c'  -o -name '*.h'    -o -name '*.cc'  -o -name '*.cpp' -o \
-        -name '*.hpp' -o -name '*.md' \) \
-        ! -path '*/.git/*' ! -path '*/node_modules/*' ! -path '*/.fusion-worktrees/*' -print0
+      # -prune, NOT `! -path`. `! -path '*/Library/*'` still DESCENDS into the directory and tests every
+      # file inside it before rejecting them — on a Unity `Library/` that is hundreds of thousands of
+      # stats for zero results. -prune never enters. Same class of bug as `grep -r` reading `.git`.
+      find "$arg" \( \
+          -name '.git' -o -name 'node_modules' -o -name '.fusion-worktrees' -o -name '.fusion' -o \
+          -name 'Library' -o -name 'Temp' -o -name 'obj' -o -name 'bin' -o -name 'build' -o \
+          -name 'dist' -o -name 'target' -o -name 'vendor' -o -name '__pycache__' -o \
+          -name '.venv' -o -name 'venv' \
+        \) -prune -o -type f \( "${ext_args[@]}" \) -print0
     else
       echo "codemap: skip '$arg' (not a file or directory)" >&2
     fi
@@ -105,13 +132,33 @@ collect_files() {
 # strips trailing block-open punctuation ('{') so a signature reads as a signature not a body opener, and
 # it also catches POSIX-shell `name()` function definitions (this very skill is mostly bash — the keyword
 # heuristic alone would map none of it).
+#
+# Modifier-led declarations: C#/Java/Swift/Kotlin declare with `public class X` and — for methods — with
+# NO keyword at all (`public void Bind(Actor a)`, `private static float Clamp01(float v)`). A keyword-only
+# pattern maps zero signatures on those repos while still exiting 0, which is a silent empty map. So the
+# modifier prefix is optional-repeatable before the keyword group, and a second alternation catches
+# `<modifier>+ <return-type> <name>(` methods. Requiring at least one modifier there keeps `if (`/`while (`
+# and ordinary call sites out.
+_CM_MOD='(public|private|protected|internal|open|final|override|virtual|abstract|static|sealed|partial|suspend|export|async|inline|extern)'
 emit_regex() {
   local f="$1"
   printf 'File: %s\n' "$f"
+  # Markdown has no declarations, so the keyword pattern maps it to an EMPTY block — 150 of them in a
+  # 498-file repo, each still flagged ' +' in file_map as if signatures existed. A doc's structure IS its
+  # heading outline, so emit that: the block becomes useful instead of a lie.
+  case "$f" in
+    *.md)
+      # Capped: an append-only doc (session log, changelog) can carry thousands of headings, and an
+      # uncapped outline would outweigh the source files the map exists to describe.
+      grep -nE '^#{1,6}[[:space:]]+\S' "$f" 2>/dev/null | head -n "${FUSION_CODEMAP_MD_MAX_HEADINGS:-40}" || true
+      printf '\n'
+      return 0
+      ;;
+  esac
   printf 'Imports:\n'
-  grep -nE '^[[:space:]]*(import |from |#include |require\(|use |using |source |\. )' "$f" 2>/dev/null \
+  grep -nE '^[[:space:]]*(import |from |#include |require\(|use |using |source |package |\. )' "$f" 2>/dev/null \
     | sed 's/^/  /' || true
-  grep -nE '^[[:space:]]*((export[[:space:]]+)?(async[[:space:]]+)?(class |def |func |fn |function |type |interface |struct |trait |impl |enum |module |sub |proc )|[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\(\)[[:space:]]*\{?[[:space:]]*$)' "$f" 2>/dev/null \
+  grep -nE '^[[:space:]]*(('"$_CM_MOD"'[[:space:]]+)*(class |def |func |fn |function |type |interface |struct |trait |impl |enum |module |sub |proc |record |protocol |object )|('"$_CM_MOD"'[[:space:]]+)+[]A-Za-z0-9_<>,.?[]*[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\(|[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\(\)[[:space:]]*\{?[[:space:]]*$)' "$f" 2>/dev/null \
     | sed -E 's/[[:space:]]*\{[[:space:]]*$//' || true
   printf '\n'
 }
@@ -163,6 +210,10 @@ EXT = {
     ".py": "python", ".js": "javascript", ".jsx": "javascript", ".ts": "typescript",
     ".tsx": "tsx", ".go": "go", ".rs": "rust", ".rb": "ruby", ".java": "java",
     ".c": "c", ".h": "c", ".cc": "cpp", ".cpp": "cpp", ".hpp": "cpp",
+    # Modifier-led languages. get_parser() raises for a grammar this install lacks; the caller then
+    # degrades THAT file to regex and says so on stderr, so an optimistic entry costs nothing.
+    ".cs": "c_sharp", ".swift": "swift", ".kt": "kotlin", ".kts": "kotlin",
+    ".php": "php", ".scala": "scala", ".lua": "lua", ".m": "objc", ".mm": "objc",
 }
 # Node types whose HEADER line is a signature worth emitting (definitions, not bodies).
 DEF_TYPES = {
@@ -170,10 +221,15 @@ DEF_TYPES = {
     "class_declaration", "type_alias_declaration", "interface_declaration", "struct_item",
     "function_item", "impl_item", "trait_item", "type_definition", "method", "module",
     "type_spec", "type_declaration", "enum_declaration", "enum_item", "function_signature",
+    # C# / Swift / Kotlin / PHP: methods and properties are their own node types, not "function_*".
+    "method_declaration", "constructor_declaration", "property_declaration", "record_declaration",
+    "struct_declaration", "delegate_declaration", "operator_declaration", "protocol_declaration",
+    "object_declaration", "init_declaration", "subscript_declaration", "secondary_constructor",
 }
 IMPORT_TYPES = {
     "import_statement", "import_from_statement", "import_declaration", "use_declaration",
     "preproc_include", "package_clause",
+    "using_directive", "import_header", "namespace_use_declaration", "import_spec",
 }
 
 def header_line(src, node):
@@ -202,8 +258,13 @@ def main(path):
                 sigs.append((ln, header_line(src, ch)))
             # recurse one extra level so methods inside a class are captured, but do not descend
             # into function bodies (we want signatures, not nested locals).
+            # C#/Java/Kotlin/Swift wrap members in an intermediate body node (declaration_list,
+            # class_body), so descending only into the type node itself would find no methods.
             if ch.type in ("class_definition", "class_declaration", "impl_item",
-                           "module", "namespace_definition") or depth == 0:
+                           "module", "namespace_definition", "namespace_declaration",
+                           "struct_declaration", "interface_declaration", "record_declaration",
+                           "object_declaration", "protocol_declaration",
+                           "declaration_list", "class_body", "enum_body") or depth == 0:
                 walk(ch, depth + 1)
     walk(tree.root_node, 0)
     print("Imports:")
@@ -236,8 +297,18 @@ while IFS= read -r -d '' file; do
   esac
 done < <(collect_files "$@")
 
+# An empty map is NEVER a success. Exiting 0 here let a caller ship a codemap-shaped artifact with no
+# map in it — e.g. /fusion-review's caller-context fallback on a C# repo, where the extension list matched
+# nothing and the panel was handed context-free "context". Same honest-degrade rule as detect_panel.sh:
+# report what actually ran, and make "nothing ran" loud. Exit 3 (2 is already usage).
 if [ "$n_files" -eq 0 ]; then
-  echo "codemap: no source files found in the given path(s)." >&2
+  echo "codemap: no source files found in the given path(s) — refusing to emit an empty map." >&2
+  echo "codemap: if the language is unmapped, add its extension to collect_files (and EXT/DEF_TYPES" >&2
+  echo "codemap: for the tree-sitter tier); if the path was pruned as build output, pass the file(s)" >&2
+  echo "codemap: explicitly — explicit FILE arguments bypass the prune list." >&2
+  echo "CODEMAP_FILES=0"
+  echo "CODEMAP_STATE=$tier"
+  exit 3
 fi
 
 # Honest-degrade backstop: if TREESITTER was selected but NOT ONE file actually parsed at that fidelity
@@ -247,5 +318,7 @@ if [ "$tier" = TREESITTER ] && [ "$ts_emitted" -eq 0 ]; then
   tier=REGEX
 fi
 
-# The single greppable disclosure line — the tier that ACTUALLY ran, never the one merely requested.
+# The greppable disclosure lines — how many files were actually mapped, and the tier that ACTUALLY ran
+# (never the one merely requested).
+echo "CODEMAP_FILES=$n_files"
 echo "CODEMAP_STATE=$tier"
