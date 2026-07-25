@@ -4,6 +4,8 @@
 
 # fusion-deck
 
+**v2.1** · shared repo map, per-seat code access, honest timeout layering — see [the measured part](#the-context-layer-measured) below.
+
 **A Claude Code decision-and-execution skill that spends extra models only when the risk earns it.** It can fan a hard question to independent panelists, keep answers blind, have Claude judge the result, and disclose the panel that actually ran. Around that core are mechanical workflows for planning, context curation, investigation, orchestration, optimization, refactoring, and handoff.
 
 It is Markdown procedures plus Bash / Python helpers—not an MCP server, model dashboard, or OpenRouter replacement.
@@ -37,6 +39,47 @@ These are mechanisms, not marketing — each maps to a specific instruction in `
 ## When it pays for itself
 
 A panel costs roughly 3 model calls and a few minutes; it is priced for decisions where being wrong costs hours or days — an architecture choice you'd live with for months, a security-sensitive diff, a root cause you're about to "fix" at the wrong layer. For those, one avoided wrong call covers a long tail of panels. For trivia and routine edits, the skill's own router says: don't convene a panel — answer directly (`/fusion-auto` routes low-risk work to a single model by design).
+
+## The context layer, measured
+
+A panel is only as good as what its seats can see. In v2.1 every seat gets the same mechanical repo map, the seats that can be sandboxed get a disposable snapshot of the code under review, and the timeouts stop lying about which knob controls them. All figures below are from this repo's own benchmarks — same run, same symbol set, `31dbda2` against `v2.1`.
+
+<table>
+<tr>
+<td width="50%"><img src="assets/readme/charts/perf-phase.svg" alt="Dumbbell chart: caller search 8,063 ms to 300 ms, map build 2,258 ms to 1,174 ms, review packet 103 ms to 56 ms; total 10,425 ms to 1,530 ms" width="100%"></td>
+<td width="50%"><img src="assets/readme/charts/context-waterfall.svg" alt="Waterfall chart: 622 signatures, plus 1,630 from unlocking C#, minus 217 from capping prose, ending at 2,035" width="100%"></td>
+</tr>
+<tr>
+<td colspan="2">
+
+**Where the time went.** Caller search dominated the old mechanical phase — `grep -rnw` read `.git` and every gitignored build tree before filtering, once per symbol. `git grep` skips both. On a repo with a large `node_modules` the same step went from **491 s to 0.9 s**.
+
+**What the context gained.** The baseline map held **zero** C# signatures on a 142-file C# repo: the extension list and the signature pattern both missed modifier-led languages, and the run still exited 0. Prose now contributes a capped heading outline instead of empty blocks, which is the −217.
+
+</td>
+</tr>
+<tr>
+<td width="50%"><img src="assets/readme/charts/timeout-placement.svg" alt="Rung bars: three Gemini-seat runs at 204s, 304s and 240s against an old 300s cap and the new 570s limit" width="100%"></td>
+<td width="50%"><img src="assets/readme/charts/map-budget.svg" alt="Tick donut: of 498 source files, 30% carry signatures, 67% are named in file_map only, 3% are tree-only" width="100%"></td>
+</tr>
+<tr>
+<td colspan="2">
+
+**Put the limit above the work, not beside it.** The Antigravity seat's own `--print-timeout` was hardcoded to 300 s while the documented `FUSION_PANEL_TIMEOUT` was 600 s — so the documented knob had no effect on that seat at all. Three measured runs landed at 204 / 304 / 240 s. The one that timed out finished in 240 s on retry, unchanged: the cap was mispositioned, not the prompt. Both layers now derive from one knob.
+
+**Truncation is disclosed, never silent.** `file_map` is always complete — hiding that a file *exists* is the one thing a map must not do — so a file over budget is still named, just without signatures, and the run reports `MAP_STATE=TRUNCATED` with the count.
+
+</td>
+</tr>
+</table>
+
+<img src="assets/readme/charts/defect-origin.svg" alt="Tick rows: 16 defects found by the panel, 10 by self-audit, 4 self-inflicted during fixing" width="52%" align="right">
+
+**And the part worth being honest about.** v2.1 was built by running `/fusion-review` on itself, four passes. The panel caught 16 defects the author missed — including a symlink that exfiltrated files from outside the repo, and a worktree whose `.git` pointer walked a seat back to the live checkout. Self-audit caught 10 more. Four were introduced *while fixing* the others and caught by the suite going red.
+
+That last bar is the argument for the whole tool: a single careful pass is not reliable enough on its own, and this is what the second reader is for.
+
+<br clear="right">
 
 ## What ships
 
@@ -129,11 +172,14 @@ Cognition/Devin measured that delegation backfires when subtle intent matters �
 ## Development verification
 
 ```bash
-bash scripts/smoke_test.sh
+bash scripts/smoke_test.sh                                   # 286 assertions, offline
 python3 scripts/route_task.py --check tests/router_cases.yml
+node scripts/charts/gen_readme_charts.js assets/readme/charts # regenerate the README charts
 ```
 
-The smoke test is offline and must not invoke paid model calls.
+The smoke test is offline and must not invoke paid model calls. The chart generator is deterministic —
+re-running it on unchanged data produces a byte-identical result, so a dirty `git diff` there means the
+numbers moved.
 
 ## License
 
