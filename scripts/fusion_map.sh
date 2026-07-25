@@ -111,8 +111,13 @@ mkdir -p "$cache" || exit 2
 # `git ls-files -s` emits "<mode> <sha> <stage>\t<path>". Using git (not find) is the whole point: it sees
 # ONLY tracked files, so gitignored build output (node_modules, Library/, target/) costs nothing — the
 # same reason /fusion-review's caller-context step uses `git grep` rather than `grep -r`.
+# mode 120000 is a SYMLINK. Excluding it here costs nothing — the mode is already in the line we parse —
+# and it keeps the inventory to things codemap can actually read. `git ls-files -d` (which replaced a
+# per-file `[ -f ]` test) does NOT report a broken symlink as deleted, because the link itself exists, so
+# a tracked `broken.py -> nowhere.py` was being counted, listed, and handed to codemap. It also matches
+# the panel snapshot's rule: a link that escapes the repo is a leak, one that stays is redundant.
 ( cd "$repo" && git ls-files -s ) \
-  | awk -F'\t' '{ split($1, m, " "); print m[2] "\t" $2 }' > "$tmp/index_sha_path"
+  | awk -F'\t' '{ split($1, m, " "); if (m[1] != "120000") print m[2] "\t" $2 }' > "$tmp/index_sha_path"
 
 # The INDEX sha is stale for a file edited but not staged — and `/fusion-review uncommitted` (the most
 # common scope) is exactly that case, where a stale map would describe the pre-edit code while claiming

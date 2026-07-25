@@ -656,6 +656,15 @@ fm_e2="$( cd "$fm_edge" && FUSION_MAP_CACHE="$fm_ec" bash "$root/scripts/fusion_
 grep -q 'my file.py' "$fm_eo/map.md" 2>/dev/null \
   && ok "fusion_map: a path containing spaces survives the awk pipeline" \
   || bad "fusion_map: a path with spaces was lost"
+# A TRACKED symlink is mode 120000 and `git ls-files -d` never reports it deleted, because the link
+# itself exists — so a broken one was counted, listed and handed to codemap once the per-file [ -f ]
+# test was optimised away.
+( cd "$fm_edge" && ln -s nowhere.py broken.py && git add -A \
+    && git -c user.email=a@b -c user.name=a commit -qm link ) >/dev/null 2>&1
+fm_lnk="$( cd "$fm_edge" && FUSION_MAP_CACHE="$fm_ec" bash "$root/scripts/fusion_map.sh" "$fm_eo" 2>/dev/null )"
+{ [ "$(fm_get "$fm_lnk" MAP_FILES)" = 2 ] && ! grep -q 'broken.py' "$fm_eo/map.md"; } \
+  && ok "fusion_map: tracked symlinks are excluded from the inventory (mode 120000)" \
+  || bad "fusion_map: a tracked symlink reached the map — it cannot be read and may point outside the repo"
 rm -rf "$fm_edge" "$fm_ec" "$fm_eo"
 
 echo "-- caller_slices behaviour --"

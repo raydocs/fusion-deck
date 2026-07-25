@@ -5,7 +5,7 @@
 # fusion-deck
 
 <a href="https://github.com/raydocs/fusion-deck/releases/tag/v2.2"><img src="assets/readme/badges/badge-version.svg" alt="Version v2.2" height="22"></a>
-<a href="#development-verification"><img src="assets/readme/badges/badge-smoke.svg" alt="Smoke: 302 passing" height="22"></a>
+<a href="#development-verification"><img src="assets/readme/badges/badge-smoke.svg" alt="Smoke: 303 passing" height="22"></a>
 <img src="assets/readme/badges/badge-panel.svg" alt="Panel: Claude + Codex + Gemini" height="22">
 <img src="assets/readme/badges/badge-deps.svg" alt="Runtime: bash + python3" height="22">
 <a href="LICENSE"><img src="assets/readme/badges/badge-license.svg" alt="License: MIT" height="22"></a>
@@ -77,13 +77,13 @@ A panel is only as good as what its seats can see. Every seat gets the same mech
 </tr>
 </table>
 
-<img src="assets/readme/charts/defect-origin.svg" alt="Tick rows: 16 defects found by the panel, 9 self-inflicted while fixing, 10 found by self-audit" width="52%" align="right">
+<img src="assets/readme/charts/defect-origin.svg" alt="Tick rows: 22 defects found by the panel, 9 self-inflicted while fixing, 10 found by self-audit" width="52%" align="right">
 
-**And the part worth being honest about.** This was built by running `/fusion-review` on itself, pass after pass. The panel caught 16 defects the author missed — including a symlink that exfiltrated files from outside the repo, and a worktree whose `.git` pointer walked a seat back to the live checkout. Self-audit caught 10 more.
+**And the part worth being honest about.** This was built by running `/fusion-review` on itself, pass after pass. The panel caught **22** defects the author missed — a symlink that exfiltrated files from outside the repo, a worktree whose `.git` pointer walked a seat back to the live checkout, and a per-symbol cap that silently dropped a symbol's only call-site whenever it shared a hunk with a busier name. Nine more were introduced *while fixing* the others.
 
-Nine were introduced *while fixing* the others, and every one of them was caught by a test going red rather than by re-reading the diff. The optimisation pass alone produced five: an `awk -v` value containing newlines that BSD awk rejects while still exiting 0, a per-symbol cap voided by matching against the file path, and a regex-based rewrite that came out **slower** than the loop it replaced.
+The sharpest data point is the optimisation pass. Before shipping it the author wrote a 12-case edge-condition suite — spaces in paths, dots in directory names, empty caches, brand-new symbols — and it found **nothing**. The panel then found six real defects in the same code, every one silent: call-sites lost when a symbol starts or ends a line (`index(WORD, "")` returns 1, not 0, on BSD awk), an unbounded packet because `git grep` merges adjacent matches into one hunk, and a false hard-stop whenever the tool ran from a subdirectory.
 
-That middle bar is the argument for the whole tool. A single careful pass is not reliable enough on its own — not even when the author is being careful on purpose.
+The author's tests probed the shapes the author had thought of. That is the failure mode a second reader exists to cover, and it is why the middle bar is not an embarrassment to hide.
 
 <br clear="right">
 
@@ -178,7 +178,7 @@ Cognition/Devin measured that delegation backfires when subtle intent matters �
 ## Development verification
 
 ```bash
-bash scripts/smoke_test.sh                                   # 302 assertions, offline
+bash scripts/smoke_test.sh                                   # 303 assertions, offline
 python3 scripts/route_task.py --check tests/router_cases.yml
 node scripts/charts/gen_readme_charts.js assets/readme/charts # regenerate the README charts
 ```

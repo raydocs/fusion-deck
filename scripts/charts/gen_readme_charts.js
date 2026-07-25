@@ -191,18 +191,21 @@ card({
 // template: C1 · tick rows. one tick = one defect; dot marks every fifth.
 card({
   file:'defect-origin.svg',
-  title:'Thirty-five defects, and who caught them',
-  sub:'one tick = one defect · dot marks every fifth · five passes on this branch',
+  title:'Forty-one defects, and who caught them',
+  sub:'one tick = one defect · dot marks every fifth · six review passes on this branch',
   src:'TICK ROWS · MONO-BASIC · DEFECT LEDGER',
   h:248,
   draw(s){
-    const D=[['PANEL FOUND',16],['SELF-INFLICTED',9],['SELF-AUDIT',10]];
+    const D=[['PANEL FOUND',22],['SELF-INFLICTED',9],['SELF-AUDIT',10]];
+    // The track spans the LARGEST row, not a hardcoded width: with 16 hardcoded, a 22-tick row ran off
+    // the end of its own baseline.
+    const MAXV=Math.max(...D.map(d=>d[1]));
     const y0=i=>40+i*46,X0=126,PX=9.5;
     D.forEach(([name,v],i)=>{
       const y=y0(i);
       txt(s,{x:116,y:y+3,'font-size':7.5,'font-weight':700,fill:'#6A6963','text-anchor':'end',
         'letter-spacing':'.08em',class:'fade',style:`animation-delay:${i*.08}s`},name);
-      el(s,'line',{x1:X0,y1:y+9,x2:X0+16*PX,y2:y+9,stroke:GRID,'stroke-width':.6,
+      el(s,'line',{x1:X0,y1:y+9,x2:(X0+MAXV*PX).toFixed(1),y2:y+9,stroke:GRID,'stroke-width':.6,
         class:'fade',style:`animation-delay:${i*.08}s`});
       for(let k=0;k<v;k++){
         const x=X0+k*PX+PX/2,h=9+rnd(k+1,i+2)*6;
@@ -217,7 +220,7 @@ card({
     });
     txt(s,{x:200,y:196,'font-size':7,'font-weight':600,fill:'#B0AFA9','text-anchor':'middle',
       'letter-spacing':'.1em',class:'fade',style:'animation-delay:.9s'},
-      'SELF-INFLICTED = INTRODUCED WHILE FIXING, CAUGHT BEFORE SHIPPING · ALL 35 CLOSED');
+      'PANEL FOUND = CAUGHT BY A SECOND READER THE AUTHOR DID NOT HAVE · ALL 41 CLOSED');
   }
 });
 
