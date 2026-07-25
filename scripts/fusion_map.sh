@@ -133,20 +133,53 @@ mkdir -p "$cache" || exit 2
 ( cd "$repo" && git -c core.quotePath=false diff --name-only
   cd "$repo" && git -c core.quotePath=false ls-files -o --exclude-standard ) 2>/dev/null \
   | sort -u > "$tmp/dirty_or_new"
+# CONTAINMENT, not a leaf test. `[ -L "$repo/$path" ]` only inspects the last component: replace a
+# tracked DIRECTORY with a symlink to somewhere outside and the leaf is an ordinary file, `-L` says no,
+# `-f` follows straight through, and the outside file gets hashed and codemapped into map.md. Verified —
+# this is the third shape of the same exfiltration and the second time a leaf-only fix let the adjacent
+# one through. So resolve each candidate directory PHYSICALLY, once per unique directory, and keep only
+# those that still live under the repo root.
+# Every path that reaches codemap must RESOLVE inside the repo, not merely be listed by git. Replace a
+# tracked DIRECTORY with a symlink to somewhere outside and git reports nothing deleted — the files still
+# "exist" through the link — so they stay in the index inventory carrying their innocent old blob SHAs
+# while codemap reads the WORKING TREE and gets the outside content. The cache key was honest and the
+# bytes were not. An untracked symlink is the only way such a prefix can appear, and that list is short,
+# so this costs a builtin test per untracked entry rather than a stat per tracked file.
+: > "$tmp/link_prefixes"
+( cd "$repo" && git -c core.quotePath=false ls-files -o --exclude-standard ) 2>/dev/null \
+  | while IFS= read -r ent; do
+      [ -n "$ent" ] || continue
+      if [ -L "$repo/${ent%/}" ]; then
+        printf '%s/\n' "${ent%/}" >> "$tmp/link_prefixes"
+        echo "fusion_map: '$ent' is a symlink — paths under it are excluded (it can resolve outside)." >&2
+      fi
+    done
+
+repo_phys="$(cd "$repo" && pwd -P)"
+: > "$tmp/safe_dirs"
+awk -F'\t' '{ print }' "$tmp/dirty_or_new" | sed 's|/[^/]*$||; s|^[^/]*$|.|' | sort -u \
+  | while IFS= read -r dir; do
+      [ -n "$dir" ] || continue
+      real="$(cd "$repo/$dir" 2>/dev/null && pwd -P)" || continue
+      case "$real/" in
+        "$repo_phys"/*|"$repo_phys"/) printf '%s\n' "$dir" >> "$tmp/safe_dirs" ;;
+        *) echo "fusion_map: skipping '$dir/' — it resolves to '$real', outside the repository." >&2 ;;
+      esac
+    done
+
 while IFS= read -r path; do
   [ -n "$path" ] || continue
   fusion_is_source_path "$path" || continue
-  # SYMLINKS ARE REFUSED HERE TOO. Filtering mode 120000 out of the index inventory was only half the
-  # job: this second inventory guards with `[ -f ]`, which FOLLOWS links. An untracked
-  # `src/leak.py -> /outside/secret.py` was therefore hashed, listed and CODEMAPPED into map.md — the
-  # artifact handed verbatim to every external seat. Verified: a function defined outside the repo
-  # appeared in the map. The harmless shape (a broken link) was excluded by `[ -f ]` while the
-  # dangerous one sailed through, which is the wrong way round.
-  if [ -L "$repo/$path" ]; then
-    echo "fusion_map: skipping symlink '$path' — it can resolve outside the repo." >&2
+  # ONE shared predicate instead of the three partial checks this file used to carry. Enumerating link
+  # TYPES failed three times running; the question is whether the BYTES live inside the repo, which also
+  # covers the hardlink that `[ -L ]` and `find -type l` are both blind to.
+  if ! fusion_path_is_contained "$repo" "$path"; then
+    echo "fusion_map: excluding '$path' — its bytes do not live inside the repo." >&2
     continue
   fi
-  [ -f "$repo/$path" ] || continue          # deletions: nothing to hash; they drop out of the map
+  _skip=0
+  while IFS= read -r _pre; do case "$path" in "$_pre"*) _skip=1; break ;; esac; done < "$tmp/link_prefixes"
+  [ "$_skip" = 1 ] && continue
   printf '%s\n' "$path" >> "$tmp/rehash_paths"
 done < "$tmp/dirty_or_new"
 
@@ -194,17 +227,19 @@ if ! ( cd "$repo" && git -c core.quotePath=false ls-files -d ) 2>"$tmp/del_err" 
   echo "MAP_STATE=DELETED_UNKNOWN"
   exit 6
 fi
-awk -F'\t' -v exts="$FUSION_SOURCE_EXT" -v del="$tmp/deleted" '
+awk -F'\t' -v exts="$FUSION_SOURCE_EXT" -v del="$tmp/deleted" -v links="$tmp/link_prefixes" '
   BEGIN { n = split(exts, a, " "); for (i = 1; i <= n; i++) ok["." a[i]] = 1 }
+  FILENAME == links { pre[++np] = $0; next }
   FILENAME == del { gone[$0] = 1; next }
   {
     p = $2
     if (p in gone) next
+    for (j = 1; j <= np; j++) if (index(p, pre[j]) == 1) next   # under a symlinked directory
     d = p; sub(/^.*\./, ".", d)          # extension, dot included; no dot => unchanged, cannot match
     if (index(p, ".") == 0 || !(d in ok)) next
     print
   }
-' "$tmp/deleted" "$tmp/all_sha_path" > "$tmp/src_sha_path"
+' "$tmp/link_prefixes" "$tmp/deleted" "$tmp/all_sha_path" > "$tmp/src_sha_path"
 
 n_files=$(wc -l < "$tmp/src_sha_path" | tr -d ' ')
 if [ "$n_files" -eq 0 ]; then

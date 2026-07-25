@@ -191,12 +191,12 @@ card({
 // template: C1 · tick rows. one tick = one defect; dot marks every fifth.
 card({
   file:'defect-origin.svg',
-  title:'Fifty defects, and who caught them',
-  sub:'one tick = one defect · dot marks every fifth · seven review passes on this branch',
+  title:'Fifty-seven defects, and who caught them',
+  sub:'one tick = one defect · dot marks every fifth · eight review passes on this branch',
   src:'TICK ROWS · MONO-BASIC · DEFECT LEDGER',
   h:248,
   draw(s){
-    const D=[['PANEL FOUND',30],['SELF-INFLICTED',10],['SELF-AUDIT',10]];
+    const D=[['PANEL FOUND',37],['SELF-INFLICTED',10],['SELF-AUDIT',10]];
     // The track spans the LARGEST row, not a hardcoded width: with 16 hardcoded, a 22-tick row ran off
     // the end of its own baseline.
     const MAXV=Math.max(...D.map(d=>d[1]));
@@ -220,7 +220,7 @@ card({
     });
     txt(s,{x:200,y:196,'font-size':7,'font-weight':600,fill:'#B0AFA9','text-anchor':'middle',
       'letter-spacing':'.1em',class:'fade',style:'animation-delay:.9s'},
-      'PANEL FOUND = CAUGHT BY A SECOND READER THE AUTHOR DID NOT HAVE · ALL 50 CLOSED');
+      'PANEL FOUND = CAUGHT BY A SECOND READER THE AUTHOR DID NOT HAVE · ALL 57 CLOSED');
   }
 });
 

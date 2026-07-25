@@ -34,6 +34,34 @@ fusion_is_source_path() {
   return 1
 }
 
+# Is <relpath> content that genuinely lives inside <repo>?
+#
+# ONE predicate, because enumerating link TYPES has now failed three times in a row: the mode-120000
+# filter missed untracked links, the `[ -L ]` leaf test missed a symlinked parent DIRECTORY, and both
+# missed a hardlink entirely — `[ -L ]` is false for it and `find -type l` cannot see it, yet the bytes
+# live outside the repo just the same. The question was never "is this a symlink", it is "do these bytes
+# live somewhere else".
+#
+# Three cheap tests, no realpath dependency:
+#   leaf is not a symlink · the containing directory RESOLVES under the repo root · the inode is not
+#   also reachable from outside (link count 1).
+# The link-count test is deliberately conservative: a legitimately hardlinked source file is refused
+# rather than shipped. Refusals must always be DISCLOSED by the caller — silence is how the first
+# exfiltration went unnoticed.
+fusion_path_is_contained() {
+  local repo="${1:?}" rel="${2:?}" dir real root n
+  [ -L "$repo/$rel" ] && return 1
+  dir="${rel%/*}"; [ "$dir" = "$rel" ] && dir="."
+  real="$(cd "$repo/$dir" 2>/dev/null && pwd -P)" || return 1
+  root="$(cd "$repo" 2>/dev/null && pwd -P)" || return 1
+  case "$real/" in "$root"/*|"$root"/) ;; *) return 1 ;; esac
+  [ -f "$repo/$rel" ] || return 1
+  n="$(stat -f %l "$repo/$rel" 2>/dev/null || stat -c %h "$repo/$rel" 2>/dev/null || echo 1)"
+  case "$n" in ''|*[!0-9]*) n=1 ;; esac
+  [ "$n" -le 1 ] || return 1
+  return 0
+}
+
 # Build a DISPOSABLE, per-seat SNAPSHOT so a CLI panelist can read the code under review instead of
 # answering from memory — without ever touching the operator's repo, and without a path back to it.
 #
@@ -84,11 +112,11 @@ fusion_panel_workspace() {
   ( cd "$top" && git ls-files -o --exclude-standard -z ) 2>/dev/null \
     | while IFS= read -r -d '' p; do
         case "$p" in .fusion/*|*/.fusion/*) continue ;; esac
-        if [ -L "$top/$p" ]; then
-          echo "[fusion_panel_workspace] refusing untracked symlink '$p' (it can point outside the repo)." >&2
+        if ! fusion_path_is_contained "$top" "$p"; then
+          echo "[fusion_panel_workspace] refusing '$p' — its bytes do not live inside the repo (symlink," >&2
+          echo "[fusion_panel_workspace] symlinked parent directory, or an inode also reachable elsewhere)." >&2
           continue
         fi
-        [ -f "$top/$p" ] || continue
         printf '%s\0' "$p"
       done >> "$keep"
   if [ -s "$keep" ]; then

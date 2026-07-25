@@ -90,8 +90,16 @@ while IFS= read -r s; do [ -n "$s" ] && pat+=(-e "$s"); done < "$symfile"
   # git grep separates hunks with a literal `--`. Attribute each hunk to the symbol on its match line
   # (joined by ':' rather than '-') and keep the first $cap hunks per symbol.
   git -c core.quotePath=false grep -n -w -C"$ctx" "${pat[@]}" 2>/dev/null \
-    | awk -v cap="$cap" -v maxlines="$maxlines" -v symfile="$symfile" '
-        BEGIN { WORD = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_" }
+    | awk -v cap="$cap" -v maxlines="$maxlines" -v ctx="$ctx" -v symfile="$symfile" '
+        BEGIN {
+          WORD = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_"
+          DECL = "(def|class|func|function|fn|sub|type|interface|struct)"
+        }
+        # A DECLARATION is not a call-site. The floor exists so a reviewer can see how a symbol is USED;
+        # satisfying it with the symbol OWN `def` line — which git grep always finds, in the very file
+        # the diff just changed — would make the guarantee vacuous, and did: whichever of the declaring
+        # file and the calling file sorted first decided whether the guarantee held.
+        function is_decl(line, sym) { return line ~ ("(^|[^A-Za-z0-9_])" DECL "[ \t]+" sym "([^A-Za-z0-9_]|$)") }
         FILENAME == symfile { if ($0 != "") a[++n] = $0; next }
         function reset(  i) {
           for (i in owners) delete owners[i]; for (i in firstline) delete firstline[i]
@@ -101,20 +109,54 @@ while IFS= read -r s; do [ -n "$s" ] && pat+=(-e "$s"); done < "$symfile"
         # meant a hunk was dropped whole once that owner hit its cap — taking with it the only call-site
         # of any colder symbol that happened to share the hunk. Measured: a symbol with two real
         # call-sites contributed zero lines because a hot symbol owned the hunks they shared.
-        function flush(  i, o, room, r, take) {
+        function flush(  i, o, room, r, take, need, lo, hi) {
           if (nowners == 0) { reset(); return }
           # The invariant: EVERY symbol with a call-site contributes at least one hunk containing one of
           # its own call-sites. Budgets bound how much MORE it gets, never whether it appears at all.
           # Both previous versions of this cap violated that and a symbol went missing entirely, so the
           # floor is now explicit rather than a consequence of the arithmetic.
-          room = 0; floor_needed = 0
+          # room is the MINIMUM remaining budget among the owners that will actually be CHARGED, not the
+          # maximum among all of them. Taking the max let a hunk be sized by a fresh co-owner and then
+          # charged to an exhausted one, so `lines[]` sailed past maxlines and the status line printed a
+          # bound the code did not hold: 531 lines against 120, 11 hunks against 5.
+          room = maxlines
           for (i = 1; i <= nowners; i++) {
             o = owners[i]
-            if (!(o in got)) floor_needed = 1
-            if (seen[o] < cap) { r = maxlines - lines[o]; if (r > room) room = r }
+            if (firstline[o] > maxlines) continue          # would be truncated away, so never charged
+            if (seen[o] >= cap) { room = 0; break }
+            r = maxlines - lines[o]; if (r < room) room = r
           }
-          if (room <= 0 && !floor_needed) { reset(); return }
-          if (room <= 0) room = maxlines          # honouring the floor for a symbol not yet represented
+          # The floor is for the owner whose line the head-truncation would THROW AWAY — not simply the
+          # first un-represented owner in the list. Picking the latter selected the hot symbol (line 1),
+          # whose line survives anyway, so the floor never fired for the symbol that needed it and the
+          # cold symbol ended up represented only by its own declaration, never by a call-site.
+          need = ""
+          for (i = 1; i <= nowners; i++) {
+            o = owners[i]
+            if (!(o in got) && firstline[o] > room) { need = o; break }
+          }
+          if (room <= 0 && need == "") { reset(); return }
+
+          # The floor must deliver what it PROMISES: a hunk containing the symbol OWN line. Granting a
+          # generic hunk did not, because truncation cuts from the HEAD — a symbol whose line sat past
+          # the budget was truncated away every time, `got[]` was never set, so the floor stayed armed
+          # forever and every later hunk bypassed both caps. Measured: 627 lines against a 120-line
+          # ceiling, 10 hunks against 5, and the symbol still absent. Emit ITS window instead.
+          if (need != "" && firstline[need] > room) {
+            lo = firstline[need] - ctx; if (lo < 1) lo = 1
+            hi = firstline[need] + ctx; if (hi > nb) hi = nb
+            if (emitted++) print "--"
+            for (i = lo; i <= hi; i++) print buf[i]
+            for (i = 1; i <= nowners; i++) {
+              o = owners[i]
+              if (firstline[o] >= lo && firstline[o] <= hi) {
+                seen[o]++; lines[o] += (hi - lo + 1)
+                if (!is_decl(buf[firstline[o]], o)) got[o] = 1
+              }
+            }
+            reset(); return
+          }
+          if (room <= 0) { reset(); return }
           # git grep MERGES matches closer than 2*context into one hunk, so a hunk is not a bounded unit:
           # 200 adjacent call-sites arrived as a single 400-line hunk while the count still read "<=5".
           # Truncate to the remaining line budget rather than emit it whole or drop it entirely.
@@ -129,7 +171,10 @@ while IFS= read -r s; do [ -n "$s" ] && pat+=(-e "$s"); done < "$symfile"
           # zero lines. You are charged for what you actually got.
           for (i = 1; i <= nowners; i++) {
             o = owners[i]
-            if (firstline[o] <= take) { seen[o]++; lines[o] += take; got[o] = 1 }
+            if (firstline[o] <= take) {
+              seen[o]++; lines[o] += take
+              if (!is_decl(buf[firstline[o]], o)) got[o] = 1
+            }
           }
           reset()
         }

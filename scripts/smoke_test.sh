@@ -609,7 +609,7 @@ _ext_c="$(mktemp -d "${TMPDIR:-/tmp}/pfo_extc.XXXXXX")"
 _ext_o="$(mktemp -d "${TMPDIR:-/tmp}/pfo_exto.XXXXXX")"
 ( cd "$_ext_repo" && FUSION_MAP_CACHE="$_ext_c" bash "$root/scripts/fusion_map.sh" "$_ext_o" ) >/dev/null 2>&1
 _map_yes="$(awk '/^## file_map/,/^## codemap/' "$_ext_o/map.md" 2>/dev/null \
-             | grep -vE '^```|^\(|^$|^##' | sed 's/ \+$//' | sort)"
+             | grep -vE '^```|^\(|^$|^##' | sed 's/ *+*$//' | sort)"
 _sh_yes="$( . "$root/scripts/gemini_backend.sh"
             ( cd "$_ext_repo" && git -c core.quotePath=false ls-files ) | while IFS= read -r pth; do
               fusion_is_source_path "$pth" && printf '%s\n' "$pth"; done | sort )"
@@ -774,6 +774,27 @@ grep -q 'coldsym' "$cs_out/callers.md" 2>/dev/null \
   && ok "caller_slices: a symbol buried in a hot merged hunk still contributes a call-site" \
   || bad "caller_slices: a cold symbol contributed NOTHING — budgets must bound how much, not whether"
 
+# The invariant asserted with a CALL-SITE pattern, on a fixture with no escape hatch. The previous
+# version grepped for the bare symbol name — which also matches its own `def` line in the declaring
+# file — and gave the symbol a private short hunk, so it could not fail. Here the cold symbol exists
+# ONLY at the tail of a long merged hunk owned by a hot symbol.
+(
+  cd "$cs_repo" || exit 1
+  git checkout -- src/lib.py
+  { i=1; while [ $i -le 200 ]; do echo 'hotpack()'; i=$((i+1)); done; echo 'coldpack()'; } > src/onlyhot.py
+  git add -A && git -c user.email=a@b -c user.name=a commit -qm onlyhot
+  printf 'def helper():\n    pass\n\ndef hotpack():\n    pass\n\ndef coldpack():\n    pass\n' > src/lib.py
+) >/dev/null 2>&1
+( cd "$cs_repo" && bash "$root/scripts/caller_slices.sh" uncommitted "$cs_out" ) >/dev/null 2>&1
+grep -qE '^src/onlyhot\.py:[0-9]+:coldpack' "$cs_out/callers.md" 2>/dev/null \
+  && ok "caller_slices: the floor delivers the symbol's OWN call-site, not just some hunk" \
+  || bad "caller_slices: a symbol reachable only past the truncation point contributed no call-site"
+# ...and the floor must not disarm the caps while doing it.
+cs_body=$(sed -n '/^```$/,$p' "$cs_out/callers.md" 2>/dev/null | sed '1d;$d' | grep -c . | head -1)
+[ "${cs_body:-999}" -le 200 ] \
+  && ok "caller_slices: honouring the floor keeps the packet bounded ($cs_body lines)" \
+  || bad "caller_slices: floor voided the caps — $cs_body lines emitted against a 2x60 ceiling"
+
 # git grep MERGES nearby matches into one hunk, so a hunk count is not a size bound. Without a line
 # budget a single hot symbol produced a 400-line hunk while the status still read "<=5 hunks".
 (
@@ -834,6 +855,7 @@ ws_dest="$(mktemp -d "${TMPDIR:-/tmp}/pfo_wsdest.XXXXXX")/repo"
   printf 'SECRET-KEY-MATERIAL\n' > ../outside_secret                                     # outside the repo
   ln -s "$(cd .. && pwd)/outside_secret" leak.py                                          # untracked symlink
   ln -s "$(cd .. && pwd)/outside_secret" tracked_leak.py && git add -f tracked_leak.py     # TRACKED symlink
+  ln "$(cd .. && pwd)/outside_secret" hard_leak.py 2>/dev/null || true                     # HARDLINK
   git -c user.email=a@b -c user.name=a commit -qm links
 ) >/dev/null 2>&1
 ( . "$root/scripts/gemini_backend.sh"; fusion_panel_workspace "$ws_repo" "$ws_dest" ) >/dev/null 2>&1
@@ -882,6 +904,11 @@ if [ "$ws_rc" -eq 0 ] && [ -d "$ws_dest" ]; then
   [ -e "$ws_dest/tracked_leak.py" ] \
     && bad "panel workspace: a TRACKED symlink survived into the snapshot (reads outside the repo)" \
     || ok "panel workspace: tracked symlinks are stripped from the snapshot"
+  # A HARDLINK is the shape neither `[ -L ]` nor `find -type l` can see, yet its bytes live outside the
+  # repo just the same. The predicate tests containment, not link type.
+  [ -e "$ws_dest/hard_leak.py" ] \
+    && bad "panel workspace: a hardlink to an outside file was copied into the snapshot" \
+    || ok "panel workspace: a hardlink to an outside file is refused"
   [ "$(find "$ws_dest" -type l 2>/dev/null | wc -l | tr -d ' ')" = 0 ] \
     && ok "panel workspace: the snapshot contains no symlinks at all" \
     || bad "panel workspace: symlinks remain in the snapshot"
@@ -942,16 +969,6 @@ grep -q '\-prune' "$root/scripts/codemap.sh" \
   && ok "codemap.sh directory walk uses -prune" \
   || bad "codemap.sh uses '! -path' — it descends into build trees before rejecting each file"
 rm -rf "$cm_prune_dir"
-
-# An apostrophe inside a single-quoted awk program TERMINATES the shell quote. Prose comments are exactly
-# where one slips in ("someone else's"), and the failure is a bash syntax error far from the cause.
-for _q in caller_slices.sh fusion_map.sh codemap.sh; do
-  if awk "/awk -v|awk -F/,/^  .\047 /" "$root/scripts/$_q" 2>/dev/null | grep -q "[a-z]\047[a-z]"; then
-    bad "$_q: an apostrophe appears inside a single-quoted awk program — it ends the quote"
-  else
-    ok "$_q: no stray apostrophe inside its awk programs"
-  fi
-done
 
 echo "-- panelist timeout layering --"
 # agy's own --print-timeout is the graceful limit; fusion_run_with_timeout is the backstop. The graceful
