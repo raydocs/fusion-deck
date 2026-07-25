@@ -52,7 +52,7 @@ fusion_is_source_path() {
 #   3. Each seat gets its OWN dest, so no seat can see another's scratch.
 fusion_panel_workspace() {
   local repo="${1:?fusion_panel_workspace <repo> <dest>}" dest="${2:?}"
-  local top patch
+  local top patch keep
   top="$(git -C "$repo" rev-parse --show-toplevel 2>/dev/null)" || return 1
   [ -n "$top" ] || return 1
   mkdir -p "$dest" 2>/dev/null || return 1
@@ -75,6 +75,12 @@ fusion_panel_workspace() {
   #   - SYMLINKS ARE REFUSED. `[ -f ]` and plain `cp` both FOLLOW links, so an untracked
   #     `key.py -> ~/.ssh/id_rsa` had its CONTENT copied into a directory whose entire purpose is to be
   #     handed to an external model. Verified exfiltration, not a hypothetical.
+  # Filter in the shell (test -L / -f are builtins, no forks), then copy the survivors with ONE tar.
+  # A per-file `mkdir -p` + `cp` loop costs two forks each — measured 1072 ms for 156 untracked files,
+  # which was most of the snapshot's cost. Symlinks are dropped from the LIST rather than archived: tar
+  # would preserve the link, and a link to ~/.ssh still resolves on this host from inside the snapshot.
+  keep="$dest.keep"
+  : > "$keep"
   ( cd "$top" && git ls-files -o --exclude-standard -z ) 2>/dev/null \
     | while IFS= read -r -d '' p; do
         case "$p" in .fusion/*|*/.fusion/*) continue ;; esac
@@ -83,14 +89,17 @@ fusion_panel_workspace() {
           continue
         fi
         [ -f "$top/$p" ] || continue
-        mkdir -p "$dest/$(dirname "$p")" 2>/dev/null
-        cp "$top/$p" "$dest/$p" 2>/dev/null
-      done
+        printf '%s\0' "$p"
+      done >> "$keep"
+  if [ -s "$keep" ]; then
+    ( cd "$top" && tar -cf - --null -T "$keep" ) 2>/dev/null | ( cd "$dest" && tar -xf - ) 2>/dev/null
+  fi
+  rm -f "$keep"
 
-  # Give the seat a working `git` again — a FRESH standalone history, no remote, no path to the original.
-  # `git grep` / `git ls-files` genuinely help a reviewer; a backlink does not.
-  ( cd "$dest" && git init -q . && git add -A \
-      && git -c user.email=panel@fusion -c user.name=panel commit -qm "panel snapshot" ) >/dev/null 2>&1
+  # Give the seat a working `git` again — a FRESH standalone index, no remote, no path to the original.
+  # `git grep` / `git ls-files` genuinely help a reviewer; a backlink does not. No commit: `git grep`
+  # works off the index, and hashing every blob a second time bought nothing.
+  ( cd "$dest" && git init -q . && git add -A ) >/dev/null 2>&1
 
   printf '%s\n' "$dest"
 }
@@ -101,7 +110,7 @@ fusion_panel_workspace() {
 fusion_panel_workspace_cleanup() {
   local repo="${1:-}" dest="${2:-}"
   [ -n "$dest" ] || return 0
-  rm -rf "$dest" "$dest.patch" 2>/dev/null
+  rm -rf "$dest" "$dest.patch" "$dest.keep" 2>/dev/null
   return 0
 }
 

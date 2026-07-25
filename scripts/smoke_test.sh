@@ -331,7 +331,10 @@ fm_out="$(mktemp -d "${TMPDIR:-/tmp}/pfo_fmout.XXXXXX")"
   { printf '# Doc title\n\n'; i=1; while [ $i -le 30 ]; do printf '## Section %s\n\nprose\n\n' "$i"; i=$((i+1)); done; } > notes.md
   git add -A && git -c user.email=a@b -c user.name=a commit -qm init
 ) >/dev/null 2>&1
-fm() { ( cd "$fm_repo" && bash "$root/scripts/fusion_map.sh" "$fm_out" "$@" 2>/dev/null ); }
+# FUSION_MAP_CACHE pinned to a throwaway dir: without it these runs populate the operator's real
+# ~/.cache/fusion-deck, so the suite would leave state behind and could read a previous run's entries.
+fm_cache="$(mktemp -d "${TMPDIR:-/tmp}/pfo_fmcache.XXXXXX")"
+fm() { ( cd "$fm_repo" && FUSION_MAP_CACHE="$fm_cache" bash "$root/scripts/fusion_map.sh" "$fm_out" "$@" 2>/dev/null ); }
 fm_get() { printf '%s\n' "$1" | grep "^$2=" | cut -d= -f2; }
 
 fm_cold="$(fm)"
@@ -382,7 +385,7 @@ grep -q 'src/C.cs' "$fm_out/map.md" 2>/dev/null \
 # The byte ceiling must bind, because the real constraint is the TIGHTEST seat's prompt transport (the
 # Antigravity seat passes its prompt via argv), not the token budget. A map sized to codex's looser cap
 # silently costs the panel its Gemini seat.
-fm_bytes="$( cd "$fm_repo" && FUSION_MAP_MAX_BYTES=900 FUSION_MAP_BUDGET_TOKENS=999999 \
+fm_bytes="$( cd "$fm_repo" && FUSION_MAP_CACHE="$fm_cache" FUSION_MAP_MAX_BYTES=900 FUSION_MAP_BUDGET_TOKENS=999999 \
              bash "$root/scripts/fusion_map.sh" "$fm_out" 2>/dev/null )"
 if [ -f "$fm_out/map.md" ] && [ "$(wc -c < "$fm_out/map.md" | tr -d ' ')" -le 900 ]; then
   ok "fusion_map: FUSION_MAP_MAX_BYTES caps the map even when the token budget is huge"
@@ -391,7 +394,7 @@ else
 fi
 # file_map alone over the ceiling: refuse loudly (exit 4). Truncating file_map would hide that files
 # exist; emitting anyway would kill a seat at launch. Neither is an acceptable silent outcome.
-( cd "$fm_repo" && FUSION_MAP_MAX_BYTES=10 bash "$root/scripts/fusion_map.sh" "$fm_out" >/dev/null 2>&1 ); fm_rc=$?
+( cd "$fm_repo" && FUSION_MAP_CACHE="$fm_cache" FUSION_MAP_MAX_BYTES=10 bash "$root/scripts/fusion_map.sh" "$fm_out" >/dev/null 2>&1 ); fm_rc=$?
 [ "$fm_rc" -eq 4 ] && ok "fusion_map: file_map over the byte ceiling exits 4 (OVERSIZE)" \
   || bad "fusion_map: oversize file_map exited $fm_rc (want 4)"
 
@@ -422,7 +425,7 @@ grep -q 'full content — focus file' "$fm_out/map.md" 2>/dev/null \
 # emitted complete by design, so it was green no matter how badly the drop order regressed.
 # The invariant is ORDERING, so assert it directly rather than hunting a budget that happens to bite:
 # every source block must precede every prose block, so prose is what the byte ceiling eats first.
-( cd "$fm_repo" && bash "$root/scripts/fusion_map.sh" "$fm_out" ) >/dev/null 2>&1
+( cd "$fm_repo" && FUSION_MAP_CACHE="$fm_cache" bash "$root/scripts/fusion_map.sh" "$fm_out" ) >/dev/null 2>&1
 fm_last_src="$(awk '/^## codemap/,0' "$fm_out/map.md" | grep -n '^File: src/' | tail -1 | cut -d: -f1)"
 fm_first_prose="$(awk '/^## codemap/,0' "$fm_out/map.md" | grep -n '^File: notes.md' | head -1 | cut -d: -f1)"
 if [ -n "$fm_last_src" ] && [ -n "$fm_first_prose" ] && [ "$fm_last_src" -lt "$fm_first_prose" ]; then
@@ -431,7 +434,7 @@ else
   bad "fusion_map: drop order wrong — last source block at $fm_last_src, first prose at $fm_first_prose"
 fi
 # And a budget inside the band where truncation actually happens must drop the prose block, not source.
-( cd "$fm_repo" && FUSION_MAP_MAX_BYTES=900 bash "$root/scripts/fusion_map.sh" "$fm_out" ) >/dev/null 2>&1
+( cd "$fm_repo" && FUSION_MAP_CACHE="$fm_cache" FUSION_MAP_MAX_BYTES=900 bash "$root/scripts/fusion_map.sh" "$fm_out" ) >/dev/null 2>&1
 fm_cm="$(awk '/^## codemap/,0' "$fm_out/map.md" 2>/dev/null)"
 if printf '%s' "$fm_cm" | grep -q 'File: src/' && ! printf '%s' "$fm_cm" | grep -q 'File: notes.md'; then
   ok "fusion_map: a binding budget keeps source and drops prose"
@@ -439,7 +442,7 @@ else
   bad "fusion_map: binding budget kept $(printf '%s' "$fm_cm" | grep -c 'File: src/') source / $(printf '%s' "$fm_cm" | grep -c 'File: notes.md') prose block(s)"
 fi
 # OVERSIZE must not leave a previous run's map.md consumable in the out dir.
-( cd "$fm_repo" && FUSION_MAP_MAX_BYTES=10 bash "$root/scripts/fusion_map.sh" "$fm_out" ) >/dev/null 2>&1
+( cd "$fm_repo" && FUSION_MAP_CACHE="$fm_cache" FUSION_MAP_MAX_BYTES=10 bash "$root/scripts/fusion_map.sh" "$fm_out" ) >/dev/null 2>&1
 [ -e "$fm_out/map.md" ] && bad "fusion_map: OVERSIZE left a stale map.md the caller could consume" \
                         || ok "fusion_map: OVERSIZE removes any stale map.md"
 
@@ -479,6 +482,38 @@ else
 fi
 rm -f "$fm_repo/src/one.py" "$fm_repo/src/two.py"
 
+# Same trap in the FULL tier: two focus paths with identical content share a blob SHA, and keying the
+# full block by that SHA made the second overwrite the first — the map then showed one path twice and
+# lost the other completely.
+printf 'def twin():\n    pass\n' > "$fm_repo/src/t1.py"
+printf 'def twin():\n    pass\n' > "$fm_repo/src/t2.py"
+fm_twin="$(fm src/t1.py src/t2.py)"
+if [ "$(grep -c '^File: src/t1.py  \[full' "$fm_out/map.md")" = 1 ] \
+   && [ "$(grep -c '^File: src/t2.py  \[full' "$fm_out/map.md")" = 1 ]; then
+  ok "fusion_map: identical-content FOCUS files each get their own full block"
+else
+  bad "fusion_map: same-blob focus files collided in the full tier — one path replaced the other"
+fi
+rm -f "$fm_repo/src/t1.py" "$fm_repo/src/t2.py"
+
+# The same focus path given twice emitted its block twice — duplicating a file inside the shared prompt
+# and pushing MAP_MAPPED above MAP_FILES.
+fm_dupfocus="$(fm src/a.py src/a.py)"
+[ "$(awk '/^## codemap/,0' "$fm_out/map.md" | grep -c '^File: src/a.py')" = 1 ] \
+  && ok "fusion_map: a repeated focus path is emitted once" \
+  || bad "fusion_map: a repeated focus path was emitted more than once"
+
+# Every source file must land in exactly one bucket. If these stop summing, files are going missing
+# somewhere between the inventory and the map, and no other assertion would notice.
+fm_cons="$(fm)"
+fm_f=$(fm_get "$fm_cons" MAP_FILES); fm_m=$(fm_get "$fm_cons" MAP_MAPPED)
+fm_d=$(fm_get "$fm_cons" MAP_DROPPED); fm_t=$(fm_get "$fm_cons" MAP_TREEONLY)
+if [ $((fm_m + fm_d + fm_t)) -eq "$fm_f" ]; then
+  ok "fusion_map: MAPPED + DROPPED + TREEONLY == FILES (no file silently lost)"
+else
+  bad "fusion_map: counts do not conserve — FILES=$fm_f but $fm_m+$fm_d+$fm_t=$((fm_m+fm_d+fm_t))"
+fi
+
 # The cache must not be written into the repo being described.
 if [ -e "$fm_repo/.fusion" ]; then
   bad "fusion_map: wrote .fusion into the target repo — a read-side builder must not mutate the tree"
@@ -495,7 +530,7 @@ fm_nogit="$(mktemp -d "${TMPDIR:-/tmp}/pfo_fmng.XXXXXX")"
     && bash "$root/scripts/fusion_map.sh" "$fm_nogit" >/dev/null 2>&1 ); fm_rc=$?
 [ "$fm_rc" -eq 3 ] && ok "fusion_map: a source-free repo exits 3 (no empty map)" \
   || bad "fusion_map: source-free repo exited $fm_rc (want 3) — silent empty map"
-rm -rf "$fm_repo" "$fm_out" "$fm_nogit"
+rm -rf "$fm_repo" "$fm_out" "$fm_nogit" "$fm_cache"
 
 # The extension list must exist in exactly ONE place; a second copy drifts and silently drops a language.
 # Pattern built from fragments so this guard never matches its own source (same trick as the retired-label

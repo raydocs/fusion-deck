@@ -69,7 +69,11 @@ fi
 
 mkdir -p "$out_dir" || exit 2
 tmp="$(mktemp -d "${TMPDIR:-/tmp}/fusion-map.XXXXXX")" || exit 2
-trap 'rm -rf "$tmp"' EXIT
+# The cache staging dir lives under $cache (so the rename is same-filesystem), which $tmp's trap does not
+# cover — an interrupted run would strand .stage.<pid> in the cache forever. INT/TERM too: the EXIT trap
+# alone does not fire when the panel is Ctrl-C'd or the parent times out.
+_fm_stage=""
+trap 'rm -rf "$tmp" ${_fm_stage:+"$_fm_stage"}' EXIT INT TERM
 
 # Ask codemap.sh which tier it would run (it owns that logic; re-deriving it here would drift) and key the
 # cache on it. Without a tier in the key, blocks built at REGEX are reused verbatim after tree-sitter is
@@ -199,7 +203,12 @@ if [ "$n_miss" -gt 0 ]; then
 
   # Fan out: one awk pass writes each file's block to $cache/<sha>.map. Absolute paths are mapped back to
   # repo-relative on the way in, so a cached block is portable across worktrees of the same repo.
-  awk -v cache="$cache" -v repo="$repo/" '
+  # Staged inside the cache dir on purpose: `mv` is only an atomic rename WITHIN a filesystem, and
+  # $TMPDIR need not share a volume with the cache. Staged elsewhere, a concurrent reader could still
+  # observe a half-copied block.
+  stage="$cache/.stage.$$"; _fm_stage="$stage"
+  mkdir -p "$stage"
+  awk -v cache="$stage" -v stage="$stage" -v repo="$repo/" '
     NR == FNR { sha[$2] = $1; next }
     /^CODEMAP_(FILES|STATE)=/ { next }
     /^File: / {
@@ -209,12 +218,16 @@ if [ "$n_miss" -gt 0 ]; then
       # Store the body only. The File: header is written at ASSEMBLY from the current path, because two
       # files with identical content share a blob SHA and would otherwise inherit whichever path was
       # cached first.
-      if (p in sha) { out = cache "/" sha[p] ".map"; printf "" > out }
+      if (p in sha) { out = stage "/" sha[p] ".map"; printf "" > out }
       next
     }
     { if (out != "") print > out }
     END { if (out != "") close(out) }
   ' FS='\t' "$tmp/miss" FS=' ' "$tmp/batch_out"
+  # One mv for the whole batch: rename is atomic per file, so a concurrent reader sees either the old
+  # entry or the complete new one, never a partial block.
+  mv "$stage"/*.map "$cache"/ 2>/dev/null
+  rmdir "$stage" 2>/dev/null; _fm_stage=""
 fi
 
 
@@ -224,6 +237,9 @@ for f in ${focus[@]+"${focus[@]}"}; do
   rel="${f#$repo/}"                                   # accept absolute or repo-relative
   awk -F'\t' -v want="$rel" '$2 == want { print }' "$tmp/src_sha_path" >> "$tmp/focus_hits"
 done
+# De-duplicate, order-preserving: the same path given twice (or listed twice by `git diff --name-only`
+# across a rename) emitted its block twice and made MAP_MAPPED exceed MAP_FILES.
+awk '!seen[$0]++' "$tmp/focus_hits" > "$tmp/focus_hits.u" && mv "$tmp/focus_hits.u" "$tmp/focus_hits"
 
 # Order: focus → code → prose. Under a byte ceiling the tail is what gets dropped, and a doc's heading
 # outline is worth less to a code review than a source file's signatures — a 150-file docs tree (session
@@ -258,8 +274,11 @@ if [ "${#focus[@]}" -gt 0 ] && [ "$full_cap" -gt 0 ] 2>/dev/null; then
     [ "$fsz" -gt "$full_cap" ] && continue
     fsha=$(awk -F'\t' -v w="$rel" '$2 == w { print $1; exit }' "$tmp/src_sha_path")
     [ -n "$fsha" ] || continue
-    { printf 'File: %s  [full content — focus file]\n' "$rel"; cat "$repo/$rel"; printf '\n'; } \
-      > "$tmp/full/$fsha.map"
+    # Body only. Two focus paths with identical content share a blob SHA; keeping the `File:` header in
+    # the block made the second one overwrite the first, so the map showed one path twice and lost the
+    # other entirely. Identical content means identical body, so the shared key is fine once the header
+    # is written at assembly instead.
+    { cat "$repo/$rel"; printf '\n'; } > "$tmp/full/$fsha.map"
   done
 fi
 
@@ -312,7 +331,10 @@ $(awk -F'\t' -v cache="$cache" -v full="$tmp/full" -v budget="$budget_bytes" \
     # A full-tier block (focus file) wins over the cached codemap block for the same content hash.
     sz = 0; buf = ""; useful = 0
     blk = full "/" $1 ".map"
-    while ((getline line < blk) > 0) { buf = buf line "\n"; sz += length(line) + 1; useful = 1 }
+    while ((getline line < blk) > 0) {
+      if (useful == 0) { buf = "File: " $2 "  [full content — focus file]\n"; sz = length(buf) }
+      buf = buf line "\n"; sz += length(line) + 1; useful = 1
+    }
     close(blk)
     if (sz > 0) {
       if (used + sz <= budget) { printf "%s\n", buf > body; print $2 > mp; used += sz; mapped++ }
