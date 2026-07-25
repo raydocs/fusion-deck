@@ -48,16 +48,27 @@ fusion_is_source_path() {
 # The link-count test is deliberately conservative: a legitimately hardlinked source file is refused
 # rather than shipped. Refusals must always be DISCLOSED by the caller — silence is how the first
 # exfiltration went unnoticed.
+# The link-count test applies ONLY when the caller says the path is untracked (third arg "strict").
+# Link count cannot tell you WHERE the other links are, so applying it everywhere rejected two files a
+# repo had legitimately hardlinked to each other — a silent shrink of the map, which fails exactly as
+# quietly as a leak. A TRACKED file is git content by definition: the operator committed those bytes, so
+# nlink says nothing about trust. An UNTRACKED hardlink is the unreviewed case, and there the
+# conservative call is to refuse and say so.
 fusion_path_is_contained() {
-  local repo="${1:?}" rel="${2:?}" dir real root n
+  local repo="${1:?}" rel="${2:?}" strict="${3:-}" dir real root n
   [ -L "$repo/$rel" ] && return 1
   dir="${rel%/*}"; [ "$dir" = "$rel" ] && dir="."
   real="$(cd "$repo/$dir" 2>/dev/null && pwd -P)" || return 1
   root="$(cd "$repo" 2>/dev/null && pwd -P)" || return 1
   case "$real/" in "$root"/*|"$root"/) ;; *) return 1 ;; esac
   [ -f "$repo/$rel" ] || return 1
-  n="$(stat -f %l "$repo/$rel" 2>/dev/null || stat -c %h "$repo/$rel" 2>/dev/null || echo 1)"
-  case "$n" in ''|*[!0-9]*) n=1 ;; esac
+  # GNU first, then BSD. GNU `-c` is the format string (%h = link count); BSD has no `-c` and fails
+  # cleanly. Reversed, GNU reads `-f` as --file-system and treats `%l` as a FILE operand, so the value
+  # was undefined on Linux — the platform where nobody here would have noticed.
+  [ "$strict" = strict ] || return 0
+  n="$(stat -c %h "$repo/$rel" 2>/dev/null || stat -f %l "$repo/$rel" 2>/dev/null || echo 1)"
+  n="$(printf '%s' "$n" | head -1 | tr -dc '0-9')"
+  [ -n "$n" ] || n=1
   [ "$n" -le 1 ] || return 1
   return 0
 }
@@ -112,7 +123,7 @@ fusion_panel_workspace() {
   ( cd "$top" && git ls-files -o --exclude-standard -z ) 2>/dev/null \
     | while IFS= read -r -d '' p; do
         case "$p" in .fusion/*|*/.fusion/*) continue ;; esac
-        if ! fusion_path_is_contained "$top" "$p"; then
+        if ! fusion_path_is_contained "$top" "$p" strict; then      # this list is untracked by definition
           echo "[fusion_panel_workspace] refusing '$p' — its bytes do not live inside the repo (symlink," >&2
           echo "[fusion_panel_workspace] symlinked parent directory, or an inode also reachable elsewhere)." >&2
           continue

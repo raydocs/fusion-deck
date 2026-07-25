@@ -130,9 +130,11 @@ mkdir -p "$cache" || exit 2
 # to be the map of what is under review. So re-hash the working-tree content of dirty files, and include
 # untracked-but-not-ignored source files, which `git ls-files` cannot see at all.
 : > "$tmp/rehash_paths"
-( cd "$repo" && git -c core.quotePath=false diff --name-only
-  cd "$repo" && git -c core.quotePath=false ls-files -o --exclude-standard ) 2>/dev/null \
-  | sort -u > "$tmp/dirty_or_new"
+# Tracked-and-dirty vs untracked are kept apart: only the untracked list gets the hardlink test, since
+# link count says nothing about trust for bytes git already has.
+( cd "$repo" && git -c core.quotePath=false diff --name-only ) 2>/dev/null | sort -u > "$tmp/dirty_tracked"
+( cd "$repo" && git -c core.quotePath=false ls-files -o --exclude-standard ) 2>/dev/null | sort -u > "$tmp/untracked_new"
+sort -u "$tmp/dirty_tracked" "$tmp/untracked_new" > "$tmp/dirty_or_new"
 # CONTAINMENT, not a leaf test. `[ -L "$repo/$path" ]` only inspects the last component: replace a
 # tracked DIRECTORY with a symlink to somewhere outside and the leaf is an ordinary file, `-L` says no,
 # `-f` follows straight through, and the outside file gets hashed and codemapped into map.md. Verified —
@@ -173,7 +175,12 @@ while IFS= read -r path; do
   # ONE shared predicate instead of the three partial checks this file used to carry. Enumerating link
   # TYPES failed three times running; the question is whether the BYTES live inside the repo, which also
   # covers the hardlink that `[ -L ]` and `find -type l` are both blind to.
-  if ! fusion_path_is_contained "$repo" "$path"; then
+  # strict for EVERY rehash candidate, not just untracked ones. "Tracked files are git content" holds
+  # for COMMITTED bytes; a tracked file whose worktree copy is a hardlink to somewhere outside is dirty,
+  # and those bytes are exactly what gets hashed and read. Clean tracked files never reach this loop, so
+  # an ordinary in-repo hardlink pair that nobody has touched is unaffected.
+  _strict=strict
+  if ! fusion_path_is_contained "$repo" "$path" "$_strict"; then
     echo "fusion_map: excluding '$path' — its bytes do not live inside the repo." >&2
     continue
   fi
@@ -186,7 +193,9 @@ done < "$tmp/dirty_or_new"
 : > "$tmp/rehash_sha_path"
 if [ -s "$tmp/rehash_paths" ]; then
   # One batched hash-object call; its output is one sha per input path, in order.
-  ( cd "$repo" && tr '\n' '\0' < "$tmp/rehash_paths" | xargs -0 git hash-object -- ) \
+  # -w writes the blob into the object store. Every inventory SHA is then readable with `cat-file`, so
+  # codemap can be fed CONTENT instead of a path — see the materialisation step below.
+  ( cd "$repo" && tr '\n' '\0' < "$tmp/rehash_paths" | xargs -0 git hash-object -w -- ) \
     > "$tmp/rehash_shas" 2>"$tmp/rehash_err"
   # `paste` pairs by POSITION. If git declines even one path (unreadable file, a race with the editor),
   # the output is one line short and every subsequent path is joined to the WRONG blob — which then
@@ -269,13 +278,33 @@ n_miss=$(wc -l < "$tmp/miss" | tr -d ' ')
 # One codemap.sh call per file would pay its fixed start-up cost (tier detection + probes) every time —
 # measured ~67 ms alone vs ~7 ms marginal inside a batch. So batch, then split the output by 'File:'.
 if [ "$n_miss" -gt 0 ]; then
+  # MATERIALISE FROM THE OBJECT STORE, never from a worktree path.
+  #
+  # Handing codemap a path meant codemap read the working tree, and a working tree can be redirected —
+  # by a symlinked file, a symlinked parent directory, a hardlink, a mount. Four passes of filtering the
+  # LISTING never touched the READING, so a tracked path whose file had been swapped still had outside
+  # bytes summarised into map.md while the run printed MAP_STATE=FULL and stderr claimed an exclusion.
+  # Worse, the block was then cached under the file's honest blob SHA, so the poisoned signatures were
+  # served forever afterwards on a perfectly clean checkout.
+  #
+  # git's object store cannot be redirected by the filesystem. Reading blobs by SHA also makes the cache
+  # key describe exactly the bytes that produced the block, and closes the check-then-read race: the
+  # content is fixed at the moment we resolved the SHA, not re-opened later by name.
+  mkdir -p "$tmp/blobs"
+  awk -F'\t' -v dir="$tmp/blobs" '
+    { ext = $2; sub(/^.*\./, "", ext); print $1 " " dir "/" $1 "." ext }
+  ' "$tmp/miss" > "$tmp/blobmap"
+  while read -r _bsha _bpath; do
+    ( cd "$repo" && git cat-file blob "$_bsha" ) > "$_bpath" 2>/dev/null || : > "$_bpath"
+  done < "$tmp/blobmap"
+
   chunk=200
   : > "$tmp/batch_out"
   start=1
   while [ "$start" -le "$n_miss" ]; do
     files=()
-    while IFS="$(printf '\t')" read -r _sha path; do files+=( "$repo/$path" ); done \
-      < <(sed -n "${start},$((start + chunk - 1))p" "$tmp/miss")
+    while read -r _bsha _bpath; do files+=( "$_bpath" ); done \
+      < <(sed -n "${start},$((start + chunk - 1))p" "$tmp/blobmap")
     [ "${#files[@]}" -eq 0 ] && break
     # codemap.sh exits 3 on an empty map; with explicit tracked source files that means a real problem,
     # so surface it rather than caching nothing and calling the map complete.
@@ -310,22 +339,23 @@ if [ "$n_miss" -gt 0 ]; then
   # observe a half-copied block.
   stage="$cache/.stage.$$"; _fm_stage="$stage"
   mkdir -p "$stage"
-  awk -v stage="$stage" -v repo="$repo/" '
-    NR == FNR { sha[$2] = $1; next }
+  awk -v stage="$stage" '
     /^CODEMAP_(FILES|STATE)=/ { next }
     /^File: / {
       if (out != "") { close(out); out = "" }
       p = substr($0, 7)
-      sub("^" repo, "", p)
+      sub(/^.*\//, "", p); sub(/\.[^.]*$/, "", p)     # blob temp name -> the SHA it was written from
       # Store the body only. The File: header is written at ASSEMBLY from the current path, because two
       # files with identical content share a blob SHA and would otherwise inherit whichever path was
       # cached first.
-      if (p in sha) { out = stage "/" sha[p] ".map"; printf "" > out }
+      # p IS the SHA now: codemap was handed $tmp/blobs/<sha>.<ext>, never a repo path, so there is no
+      # path->sha lookup left to get wrong.
+      if (p ~ /^[0-9a-f][0-9a-f]+$/) { out = stage "/" p ".map"; printf "" > out }
       next
     }
     { if (out != "") print > out }
     END { if (out != "") close(out) }
-  ' FS='\t' "$tmp/miss" FS=' ' "$tmp/batch_out"
+  ' "$tmp/batch_out"
   # One mv for the whole batch: rename is atomic per file, so a concurrent reader sees either the old
   # entry or the complete new one, never a partial block.
   staged_n=$(find "$stage" -name '*.map' 2>/dev/null | wc -l | tr -d ' ')

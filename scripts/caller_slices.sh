@@ -26,6 +26,12 @@
 
 set -uo pipefail
 
+# fusion_path_is_contained lives here. Without this source the function is undefined, the `||` branch
+# fires for EVERY path, and the tool silently rejects the whole repo — over-rejection is as quiet a
+# failure as a leak, which is why the fixture below asserts a legitimate call-site is still present.
+_cs_here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$_cs_here/gemini_backend.sh"
+
 scope="${1:?usage: caller_slices.sh <scope> <out_dir> [context_lines] [hunks_per_symbol] [lines_per_symbol]}"
 out_dir="${2:?usage: caller_slices.sh <scope> <out_dir> [context_lines] [hunks_per_symbol] [lines_per_symbol]}"
 ctx="${3:-4}"
@@ -89,7 +95,25 @@ while IFS= read -r s; do [ -n "$s" ] && pat+=(-e "$s"); done < "$symfile"
   echo '```'
   # git grep separates hunks with a literal `--`. Attribute each hunk to the symbol on its match line
   # (joined by ':' rather than '-') and keep the first $cap hunks per symbol.
-  git -c core.quotePath=false grep -n -w -C"$ctx" "${pat[@]}" 2>/dev/null \
+  # CONTAINMENT APPLIES HERE TOO. `git grep` searches working-tree paths, so a tracked file whose parent
+  # directory has been replaced by a symlink to somewhere outside is read from OUTSIDE and its lines land
+  # in callers.md — the artifact every seat receives. Verified: three lines of secrets from a file beyond
+  # the repo. The map and the snapshot were hardened one pass earlier; this reader was left open.
+  git -c core.quotePath=false grep -n -w -C"$ctx" "${pat[@]}" 2>/dev/null > "$out_dir/.raw_grep"
+  : > "$out_dir/.denied"
+  sed -n 's/^\([^:]*\)[:-][0-9][0-9]*[:-].*/\1/p' "$out_dir/.raw_grep" | sort -u \
+    | while IFS= read -r gp; do
+        [ -n "$gp" ] || continue
+        _s=""; git ls-files --error-unmatch -- "$gp" >/dev/null 2>&1 || _s=strict
+        fusion_path_is_contained "$toplevel" "$gp" "$_s" \
+          || { printf '%s\n' "$gp" >> "$out_dir/.denied"
+               echo "caller_slices: excluding hits in '$gp' — its bytes do not live inside the repo." >&2; }
+      done
+  awk -v denied="$out_dir/.denied" '
+      FILENAME == denied { bad[$0] = 1; next }
+      /^--$/ { print; next }
+      { p = $0; sub(/[:-][0-9]+[:-].*$/, "", p); if (!(p in bad)) print }
+    ' "$out_dir/.denied" "$out_dir/.raw_grep" \
     | awk -v cap="$cap" -v maxlines="$maxlines" -v ctx="$ctx" -v symfile="$symfile" '
         BEGIN {
           WORD = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_"
@@ -207,6 +231,7 @@ while IFS= read -r s; do [ -n "$s" ] && pat+=(-e "$s"); done < "$symfile"
           }
         }
         END { flush() }' "$symfile" -
+  rm -f "$out_dir/.raw_grep" "$out_dir/.denied"
   echo '```'
 } > "$out"
 

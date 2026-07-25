@@ -568,6 +568,43 @@ case "$tl_bad" in
 esac
 rm -rf "$tl_bad_dir"
 
+# The containment class, as a MATRIX rather than one reproduction. Five passes each closed the shape the
+# previous review named and left an adjacent one open, so the shapes are enumerated together and the
+# legitimate case is asserted alongside them — over-rejection fails exactly as quietly as a leak.
+fm_leak_repo="$(mktemp -d "${TMPDIR:-/tmp}/pfo_fmleak.XXXXXX")"
+fm_leak_out="$(mktemp -d "${TMPDIR:-/tmp}/pfo_fmleako.XXXXXX")"
+printf 'def OUTSIDE_ONLY():\n    pass\n' > "$fm_leak_out/secret.py"
+mkdir -p "$fm_leak_out/pdir" && cp "$fm_leak_out/secret.py" "$fm_leak_out/pdir/x.py"
+(
+  cd "$fm_leak_repo" || exit 1
+  git init -q .
+  printf 'def keep_me():\n    pass\n' > keep.py
+  printf 'def committed_a():\n    pass\n' > a.py
+  printf 'def committed_b():\n    pass\n' > b.py
+  mkdir -p v && printf 'def committed_v():\n    pass\n' > v/x.py
+  git add -A && git -c user.email=a@b -c user.name=a commit -qm init
+  rm a.py && ln -s "$fm_leak_out/secret.py" a.py          # tracked file -> outside symlink
+  rm b.py && ln    "$fm_leak_out/secret.py" b.py          # tracked file -> outside hardlink
+  rm -rf v && ln -s "$fm_leak_out/pdir" v                 # tracked dir  -> outside symlink
+  ln -s "$fm_leak_out/secret.py" u_sym.py                 # untracked symlink
+  ln    "$fm_leak_out/secret.py" u_hard.py                # untracked hardlink
+) >/dev/null 2>&1
+fm_leak_c="$(mktemp -d "${TMPDIR:-/tmp}/pfo_fmleakc.XXXXXX")"
+( cd "$fm_leak_repo" && FUSION_MAP_CACHE="$fm_leak_c" bash "$root/scripts/fusion_map.sh" "$fm_leak_out" ) >/dev/null 2>&1
+grep -q 'OUTSIDE_ONLY' "$fm_leak_out/map.md" 2>/dev/null \
+  && bad "fusion_map: content from outside the repo reached map.md (five link shapes tested)" \
+  || ok "fusion_map: no outside content reaches map.md across five link shapes"
+grep -q 'keep_me' "$fm_leak_out/map.md" 2>/dev/null \
+  && ok "fusion_map: ordinary files survive the containment filter" \
+  || bad "fusion_map: containment rejected an ordinary file — over-rejection is as quiet as a leak"
+# The poisoned-cache case: once outside bytes are cached under an honest blob SHA they are served forever.
+( cd "$fm_leak_repo" && rm -f a.py && git checkout -- a.py ) >/dev/null 2>&1
+( cd "$fm_leak_repo" && FUSION_MAP_CACHE="$fm_leak_c" bash "$root/scripts/fusion_map.sh" "$fm_leak_out" ) >/dev/null 2>&1
+grep -q 'OUTSIDE_ONLY' "$fm_leak_out/map.md" 2>/dev/null \
+  && bad "fusion_map: a poisoned cache block is still served after the worktree is clean again" \
+  || ok "fusion_map: restoring the worktree clears the leak (blocks are keyed to the bytes read)"
+rm -rf "$fm_leak_repo" "$fm_leak_out" "$fm_leak_c"
+
 # Honest degrade: not a repo => exit 2 + NO_GIT; a repo with no source => exit 3 (never an empty success).
 fm_nogit="$(mktemp -d "${TMPDIR:-/tmp}/pfo_fmng.XXXXXX")"
 ( cd "$fm_nogit" && FUSION_MAP_CACHE="$fm_cache" bash "$root/scripts/fusion_map.sh" "$fm_nogit" >/dev/null 2>&1 ); fm_rc=$?
@@ -818,6 +855,31 @@ cs_sub="$( cd "$cs_repo/sub" && bash "$root/scripts/caller_slices.sh" uncommitte
 printf '%s' "$cs_sub" | grep -q 'CALLER_SLICES=OK' \
   && ok "caller_slices: runs from a subdirectory (git grep is CWD-scoped, git diff is not)" \
   || bad "caller_slices: from a subdirectory it reported $(printf '%s' "$cs_sub" | grep CALLER_SLICES=) — false hard-stop"
+
+# `git grep` reads WORKING-TREE paths, so a tracked file under a parent directory replaced by a symlink
+# to somewhere outside is read from outside and its lines land in callers.md — the artifact every seat
+# receives. The map and the snapshot were hardened a pass earlier; this reader was left open.
+# The second assertion is the mirror: over-rejection is as quiet a failure as a leak, and the first
+# attempt at this fix rejected the ENTIRE repo because the predicate was not in scope.
+cs_out_side="$(mktemp -d "${TMPDIR:-/tmp}/pfo_csout.XXXXXX")"
+printf 'SECRET_TOKEN = "sk-live-x"\ndef sharedname():\n    pass\n' > "$cs_out_side/x.py"
+(
+  cd "$cs_repo" || exit 1
+  git checkout -- src/lib.py
+  mkdir -p vendorlink && printf 'def innocent():\n    pass\n' > vendorlink/x.py
+  printf 'def uses():\n    sharedname()\n' > src/uses_shared.py
+  git add -A && git -c user.email=a@b -c user.name=a commit -qm vendorlink
+  rm -rf vendorlink && ln -s "$cs_out_side" vendorlink
+  printf 'def helper():\n    pass\n\ndef sharedname():\n    pass\n' > src/lib.py
+) >/dev/null 2>&1
+( cd "$cs_repo" && bash "$root/scripts/caller_slices.sh" uncommitted "$cs_out" ) >/dev/null 2>&1
+grep -q 'SECRET_TOKEN' "$cs_out/callers.md" 2>/dev/null \
+  && bad "caller_slices: content from outside the repo reached callers.md via a symlinked parent dir" \
+  || ok "caller_slices: hits under a symlinked-out directory are excluded"
+grep -q 'src/uses_shared.py' "$cs_out/callers.md" 2>/dev/null \
+  && ok "caller_slices: legitimate in-repo call-sites survive the containment filter" \
+  || bad "caller_slices: the containment filter rejected a legitimate in-repo call-site"
+rm -rf "$cs_out_side"
 
 # A diff with no keyword-declared symbols must say so, not write an empty fence.
 # `git add -N` so the change actually APPEARS in `git diff`. Creating an untracked file left the diff
