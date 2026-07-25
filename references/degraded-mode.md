@@ -47,3 +47,21 @@ degrades to `CLAUDE_ONLY` (two cold Claude runs), which is the floor — always 
 
 `FUSION_ALLOW_DEGRADED` is the operator's explicit escape hatch. It must always produce a visible banner;
 it must never become a silent default.
+
+## Panelist timeouts are layered, and one knob moves both
+
+Each CLI seat has two limits: the CLI's **own graceful timeout** (it returns its own error, which the
+runner can report) and a **backstop** that kills a CLI hung before its own timer arms. The graceful one
+must be the shorter of the two, or the backstop never gets to matter — and both must move with
+`FUSION_PANEL_TIMEOUT`, the one documented knob.
+
+They were independent once: the Antigravity seat's `--print-timeout` was hardcoded to 300s while the
+backstop was 600s, so `FUSION_PANEL_TIMEOUT` had **no effect at all** on that seat and codex effectively
+got twice the budget. An operator hitting a timeout and raising the documented variable would have seen
+nothing change.
+
+Position the limit well above the work, not beside it. Measured on real review packets this seat takes
+**204 s / 240 s / 304 s** — a cap at 300 s sits inside that spread, so ordinary latency variance alone
+produces failures. One prompt timed out at 304 s and completed in 240 s on retry with no change at all:
+the cap was mispositioned, not the prompt. The graceful limit now defaults to
+`FUSION_PANEL_TIMEOUT - 30s`, and `FUSION_ANTIGRAVITY_PRINT_TIMEOUT` still overrides it explicitly.

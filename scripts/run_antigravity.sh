@@ -25,7 +25,19 @@ if [ ! -s "$prompt_file" ]; then
 fi
 
 antigravity_model="${FUSION_ANTIGRAVITY_MODEL:-Gemini 3.1 Pro (High)}"
-print_timeout="${FUSION_ANTIGRAVITY_PRINT_TIMEOUT:-5m0s}"
+
+# TWO timeouts, and they must be layered in the right order. `--print-timeout` is agy's own graceful
+# limit; fusion_run_with_timeout below is the backstop for a CLI that hangs before its own timer arms.
+# The graceful one therefore has to be SHORTER than the backstop, and both have to move together.
+#
+# They did not. The inner default was a hardcoded 5m0s (300s) while the backstop was FUSION_PANEL_TIMEOUT
+# (600s), so the inner limit always fired first: the documented knob had NO effect on this seat, and
+# codex effectively got twice the budget. Measured on real review packets, this seat takes 204s / 240s /
+# 304s — the same order of magnitude as the 300s cap, which is the worst possible place for a hard limit.
+# One prompt timed out at 304s and succeeded at 240s on retry: the cap was mispositioned, not the prompt.
+timeout_secs="${FUSION_PANEL_TIMEOUT:-600}"
+_agy_grace=$(( timeout_secs > 60 ? timeout_secs - 30 : timeout_secs ))
+print_timeout="${FUSION_ANTIGRAVITY_PRINT_TIMEOUT:-${_agy_grace}s}"
 echo "[run_antigravity.sh] MODEL=$antigravity_model PRINT_TIMEOUT=$print_timeout BACKEND=antigravity" >&2
 
 prompt_abs="$(cd "$(dirname "$prompt_file")" && pwd)/$(basename "$prompt_file")"
@@ -91,9 +103,8 @@ agy_args=(
   --print "$prompt"
 )
 
-# Outer hard bound in addition to agy's own --print-timeout, so a hang in the CLI itself (before its
-# internal timeout arms) still can't wedge the panel.
-timeout_secs="${FUSION_PANEL_TIMEOUT:-600}"
+# Backstop for a hang in the CLI itself, before its own --print-timeout arms. Derived above so the two
+# layers cannot drift apart again.
 # Mark the panelist process tree so the recursion guard refuses any nested fusion invocation.
 export FUSION_PANEL_CHILD=1
 ( cd "$cwd" && fusion_run_with_timeout "$timeout_secs" agy "${agy_args[@]}" < /dev/null ) > "$out_abs" 2> "$scratch/agy.err"

@@ -719,6 +719,30 @@ grep -q '\-prune' "$root/scripts/codemap.sh" \
   || bad "codemap.sh uses '! -path' — it descends into build trees before rejecting each file"
 rm -rf "$cm_prune_dir"
 
+echo "-- panelist timeout layering --"
+# agy's own --print-timeout is the graceful limit; fusion_run_with_timeout is the backstop. The graceful
+# one must be SHORTER, and both must move with the ONE documented knob. They were independent: a
+# hardcoded 300s inner vs a 600s outer meant FUSION_PANEL_TIMEOUT had no effect on this seat at all,
+# while codex got twice the budget. Measured seat latencies were 204/240/304s against that 300s cap.
+tl_dir="$(mktemp -d "${TMPDIR:-/tmp}/pfo_tl.XXXXXX")"
+printf '#!/usr/bin/env bash\nprintf "%%0.sX" {1..300}\n' > "$tl_dir/agy"; chmod +x "$tl_dir/agy"
+printf 'probe\n' > "$tl_dir/p.md"
+tl() { PATH="$tl_dir:$PATH" env "$@" bash "$root/scripts/run_antigravity.sh" "$tl_dir/p.md" "$tl_dir/o.md" 2>&1 \
+         | grep -oE 'PRINT_TIMEOUT=[^ ]*' | head -1; }
+tl_def="$(tl FUSION_PANEL_TIMEOUT=600)"
+tl_big="$(tl FUSION_PANEL_TIMEOUT=1200)"
+tl_ovr="$(tl FUSION_ANTIGRAVITY_PRINT_TIMEOUT=42s)"
+[ "$tl_def" = "PRINT_TIMEOUT=570s" ] \
+  && ok "run_antigravity: graceful timeout is derived from FUSION_PANEL_TIMEOUT with headroom" \
+  || bad "run_antigravity: graceful timeout is $tl_def, not derived from the documented knob"
+[ "$tl_big" = "PRINT_TIMEOUT=1170s" ] \
+  && ok "run_antigravity: raising FUSION_PANEL_TIMEOUT actually raises this seat's limit" \
+  || bad "run_antigravity: FUSION_PANEL_TIMEOUT=1200 gave $tl_big — the knob does not move this seat"
+[ "$tl_ovr" = "PRINT_TIMEOUT=42s" ] \
+  && ok "run_antigravity: FUSION_ANTIGRAVITY_PRINT_TIMEOUT still overrides explicitly" \
+  || bad "run_antigravity: explicit print-timeout override ignored ($tl_ovr)"
+rm -rf "$tl_dir"
+
 echo "-- selection_lint behavior --"
 if python3 "$root/scripts/selection_lint.py" "$root/examples/selection.example.json" >/dev/null 2>&1; then
   ok "selection_lint PASSES the good example manifest"
