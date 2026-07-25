@@ -591,21 +591,34 @@ if command -v zsh >/dev/null 2>&1; then
     bad "fusion_is_source_path matches nothing under zsh — silent empty map for a whole repo"
   fi
 fi
-# fusion_map.sh's awk filter re-implements fusion_is_source_path in a second language, so the two can
-# drift. Assert they agree on a fixture list rather than trusting that they were written to match.
-_ext_probe="$(mktemp "${TMPDIR:-/tmp}/pfo_ext.XXXXXX")"
-printf '%s\n' a.py b.cs c.md d.png e.tar.gz f "g.PY" "dir.d/noext" "h.p?" > "$_ext_probe"
+# The oracle must be fusion_map.sh ITSELF, not a third copy of the filter pasted in here — a hand copy
+# only proves the test agrees with itself, and drifts along with nothing. Drive the real script over a
+# fixture containing each path shape and compare against fusion_is_source_path.
+_ext_repo="$(mktemp -d "${TMPDIR:-/tmp}/pfo_extr.XXXXXX")"
+(
+  cd "$_ext_repo" || exit 1
+  git init -q .
+  mkdir -p "dir.d"
+  for _p in a.py b.cs c.md "dir.d/noext" "h.p?" e.tar.gz; do
+    printf 'def probe():\n    pass\n' > "$_p" 2>/dev/null || true
+  done
+  printf 'x\n' > d.png
+  git add -A && git -c user.email=a@b -c user.name=a commit -qm init
+) >/dev/null 2>&1
+_ext_c="$(mktemp -d "${TMPDIR:-/tmp}/pfo_extc.XXXXXX")"
+_ext_o="$(mktemp -d "${TMPDIR:-/tmp}/pfo_exto.XXXXXX")"
+( cd "$_ext_repo" && FUSION_MAP_CACHE="$_ext_c" bash "$root/scripts/fusion_map.sh" "$_ext_o" ) >/dev/null 2>&1
+_map_yes="$(awk '/^## file_map/,/^## codemap/' "$_ext_o/map.md" 2>/dev/null \
+             | grep -vE '^```|^\(|^$|^##' | sed 's/ \+$//' | sort)"
 _sh_yes="$( . "$root/scripts/gemini_backend.sh"
-            while IFS= read -r pth; do fusion_is_source_path "$pth" && printf '%s\n' "$pth"; done < "$_ext_probe" )"
-_awk_yes="$(awk -v exts="$( . "$root/scripts/gemini_backend.sh"; printf '%s' "$FUSION_SOURCE_EXT" )" '
-  BEGIN { n = split(exts, a, " "); for (i = 1; i <= n; i++) ok["." a[i]] = 1 }
-  { p = $0; d = p; sub(/^.*\./, ".", d); if (index(p, ".") && (d in ok)) print }' "$_ext_probe")"
-if [ "$_sh_yes" = "$_awk_yes" ]; then
-  ok "the shell and awk source-extension filters agree on a fixture list"
+            ( cd "$_ext_repo" && git -c core.quotePath=false ls-files ) | while IFS= read -r pth; do
+              fusion_is_source_path "$pth" && printf '%s\n' "$pth"; done | sort )"
+if [ "$_map_yes" = "$_sh_yes" ]; then
+  ok "fusion_map's real filter agrees with fusion_is_source_path end-to-end"
 else
-  bad "source-extension filters disagree — shell:[$(printf '%s' "$_sh_yes" | tr '\n' ' ')] awk:[$(printf '%s' "$_awk_yes" | tr '\n' ' ')]"
+  bad "source-filter drift — map:[$(printf '%s' "$_map_yes" | tr '\n' ' ')] shell:[$(printf '%s' "$_sh_yes" | tr '\n' ' ')]"
 fi
-rm -f "$_ext_probe"
+rm -rf "$_ext_repo" "$_ext_c" "$_ext_o"
 
 _fm_ext_pat="$(printf '%s_SOURCE_EXT=' 'FUSION')"
 if [ "$(grep -rl "$_fm_ext_pat" "$root/scripts" | wc -l | tr -d ' ')" -eq 1 ]; then
@@ -740,6 +753,26 @@ grep -q 'edgefnX' "$cs_out/callers.md" 2>/dev/null \
 grep -q 'beta' "$cs_out/callers.md" 2>/dev/null \
   && ok "caller_slices: a cold symbol sharing a hunk with a hot one is not starved out" \
   || bad "caller_slices: a symbol's only call-site was dropped because a hot symbol owned the hunk"
+
+# THE invariant: every symbol with a call-site contributes at least one hunk containing one of its OWN
+# call-sites. Budgets bound how much more a symbol gets, never whether it appears. Two successive
+# versions of the cap violated this and a symbol vanished completely — first via the hunk cap, then via
+# the line budget after the "fix". The shape that breaks it is a cold symbol buried inside one long
+# merged hunk owned mostly by a hot symbol, which is why it needs its own fixture.
+(
+  cd "$cs_repo" || exit 1
+  git checkout -- src/lib.py
+  i=1; while [ $i -le 90 ]; do echo 'hotsym()'; i=$((i+1)); done  > src/buried.py
+  echo 'coldsym()' >> src/buried.py
+  i=1; while [ $i -le 10 ]; do echo 'hotsym()'; i=$((i+1)); done >> src/buried.py
+  echo 'coldsym()' > src/coldonly.py
+  git add -A && git -c user.email=a@b -c user.name=a commit -qm buried
+  printf 'def helper():\n    pass\n\ndef hotsym():\n    pass\n\ndef coldsym():\n    pass\n' > src/lib.py
+) >/dev/null 2>&1
+( cd "$cs_repo" && bash "$root/scripts/caller_slices.sh" uncommitted "$cs_out" ) >/dev/null 2>&1
+grep -q 'coldsym' "$cs_out/callers.md" 2>/dev/null \
+  && ok "caller_slices: a symbol buried in a hot merged hunk still contributes a call-site" \
+  || bad "caller_slices: a cold symbol contributed NOTHING — budgets must bound how much, not whether"
 
 # git grep MERGES nearby matches into one hunk, so a hunk count is not a size bound. Without a line
 # budget a single hot symbol produced a 400-line hunk while the status still read "<=5 hunks".
@@ -909,6 +942,16 @@ grep -q '\-prune' "$root/scripts/codemap.sh" \
   && ok "codemap.sh directory walk uses -prune" \
   || bad "codemap.sh uses '! -path' — it descends into build trees before rejecting each file"
 rm -rf "$cm_prune_dir"
+
+# An apostrophe inside a single-quoted awk program TERMINATES the shell quote. Prose comments are exactly
+# where one slips in ("someone else's"), and the failure is a bash syntax error far from the cause.
+for _q in caller_slices.sh fusion_map.sh codemap.sh; do
+  if awk "/awk -v|awk -F/,/^  .\047 /" "$root/scripts/$_q" 2>/dev/null | grep -q "[a-z]\047[a-z]"; then
+    bad "$_q: an apostrophe appears inside a single-quoted awk program — it ends the quote"
+  else
+    ok "$_q: no stray apostrophe inside its awk programs"
+  fi
+done
 
 echo "-- panelist timeout layering --"
 # agy's own --print-timeout is the graceful limit; fusion_run_with_timeout is the backstop. The graceful

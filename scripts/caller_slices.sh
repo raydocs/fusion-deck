@@ -18,14 +18,16 @@
 #   2. ONE grep for all symbols, not one per symbol. Twenty separate `git grep` processes cost 322 ms
 #      where a single multi-pattern pass costs 32 ms. The per-symbol cap the loop used to provide is
 #      re-applied afterwards in awk, so one hot symbol still cannot eat the whole packet.
-#   3. The symbol list reaches awk through a FILE, never `-v`. BSD awk rejects a -v value containing
+#   3. `core.quotePath=false` on every path-producing call. It defaults to TRUE, so a non-ASCII path comes
+#      back escaped as "\344\270\255...py" — a reviewer cannot cite it and the extension test rejects it.
+#   4. The symbol list reaches awk through a FILE, never `-v`. BSD awk rejects a -v value containing
 #      newlines ("newline in string") and then emits NOTHING while the script still exits 0 — a silent
 #      empty slice set under a status line announcing N symbols.
 
 set -uo pipefail
 
-scope="${1:?usage: caller_slices.sh <scope> <out_dir> [context_lines] [hunks_per_symbol]}"
-out_dir="${2:?usage: caller_slices.sh <scope> <out_dir> [context_lines] [hunks_per_symbol]}"
+scope="${1:?usage: caller_slices.sh <scope> <out_dir> [context_lines] [hunks_per_symbol] [lines_per_symbol]}"
+out_dir="${2:?usage: caller_slices.sh <scope> <out_dir> [context_lines] [hunks_per_symbol] [lines_per_symbol]}"
 ctx="${3:-4}"
 cap="${4:-5}"
 maxlines="${5:-60}"
@@ -42,14 +44,14 @@ out_dir="$(cd "$out_dir" && pwd)" || exit 2
 cd "$toplevel" || exit 2
 
 case "$scope" in
-  uncommitted) diff_cmd=(git diff) ;;
-  staged)      diff_cmd=(git diff --staged) ;;
+  uncommitted) diff_cmd=(git -c core.quotePath=false diff) ;;
+  staged)      diff_cmd=(git -c core.quotePath=false diff --staged) ;;
   back:*)      n="${scope#back:}"
     case "$n" in ''|*[!0-9]*) echo "caller_slices: bad back:N '$scope'" >&2; exit 2 ;; esac
-    diff_cmd=(git diff "HEAD~$n..HEAD") ;;
+    diff_cmd=(git -c core.quotePath=false diff "HEAD~$n..HEAD") ;;
   *)
-    if [ "${scope#*..}" != "$scope" ]; then diff_cmd=(git diff "$scope")
-    elif git rev-parse --verify --quiet "${scope}^{commit}" >/dev/null; then diff_cmd=(git diff "${scope}...HEAD")
+    if [ "${scope#*..}" != "$scope" ]; then diff_cmd=(git -c core.quotePath=false diff "$scope")
+    elif git rev-parse --verify --quiet "${scope}^{commit}" >/dev/null; then diff_cmd=(git -c core.quotePath=false diff "${scope}...HEAD")
     else echo "caller_slices: unknown scope '$scope'" >&2; exit 2; fi ;;
 esac
 
@@ -87,23 +89,32 @@ while IFS= read -r s; do [ -n "$s" ] && pat+=(-e "$s"); done < "$symfile"
   echo '```'
   # git grep separates hunks with a literal `--`. Attribute each hunk to the symbol on its match line
   # (joined by ':' rather than '-') and keep the first $cap hunks per symbol.
-  git grep -n -w -C"$ctx" "${pat[@]}" 2>/dev/null \
+  git -c core.quotePath=false grep -n -w -C"$ctx" "${pat[@]}" 2>/dev/null \
     | awk -v cap="$cap" -v maxlines="$maxlines" -v symfile="$symfile" '
         BEGIN { WORD = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_" }
         FILENAME == symfile { if ($0 != "") a[++n] = $0; next }
-        function reset(  i) { for (i in owners) delete owners[i]; nowners = 0; nb = 0 }
+        function reset(  i) {
+          for (i in owners) delete owners[i]; for (i in firstline) delete firstline[i]
+          nowners = 0; nb = 0; hunkno++
+        }
         # A hunk belongs to EVERY symbol matched inside it, not just the first. Owning it by one symbol
         # meant a hunk was dropped whole once that owner hit its cap — taking with it the only call-site
         # of any colder symbol that happened to share the hunk. Measured: a symbol with two real
         # call-sites contributed zero lines because a hot symbol owned the hunks they shared.
         function flush(  i, o, room, r, take) {
           if (nowners == 0) { reset(); return }
-          room = 0
+          # The invariant: EVERY symbol with a call-site contributes at least one hunk containing one of
+          # its own call-sites. Budgets bound how much MORE it gets, never whether it appears at all.
+          # Both previous versions of this cap violated that and a symbol went missing entirely, so the
+          # floor is now explicit rather than a consequence of the arithmetic.
+          room = 0; floor_needed = 0
           for (i = 1; i <= nowners; i++) {
             o = owners[i]
+            if (!(o in got)) floor_needed = 1
             if (seen[o] < cap) { r = maxlines - lines[o]; if (r > room) room = r }
           }
-          if (room <= 0) { reset(); return }
+          if (room <= 0 && !floor_needed) { reset(); return }
+          if (room <= 0) room = maxlines          # honouring the floor for a symbol not yet represented
           # git grep MERGES matches closer than 2*context into one hunk, so a hunk is not a bounded unit:
           # 200 adjacent call-sites arrived as a single 400-line hunk while the count still read "<=5".
           # Truncate to the remaining line budget rather than emit it whole or drop it entirely.
@@ -111,7 +122,15 @@ while IFS= read -r s; do [ -n "$s" ] && pat+=(-e "$s"); done < "$symfile"
           if (emitted++) print "--"
           for (i = 1; i <= take; i++) print buf[i]
           if (take < nb) printf "   [... %d more lines in this hunk, truncated at the per-symbol line budget]\n", nb - take
-          for (i = 1; i <= nowners; i++) { o = owners[i]; seen[o]++; lines[o] += take }
+          # Charge only the owners whose OWN match line made it into the emitted portion. Charging every
+          # co-owner meant a symbol paid its whole line budget for a hunk that was 99% another symbol,
+          # in which its own line had been truncated away, after which its dedicated hunk was
+          # dropped for lack of budget. Measured: a symbol with call-sites in three files contributed
+          # zero lines. You are charged for what you actually got.
+          for (i = 1; i <= nowners; i++) {
+            o = owners[i]
+            if (firstline[o] <= take) { seen[o]++; lines[o] += take; got[o] = 1 }
+          }
           reset()
         }
         /^--$/ { flush(); next }
@@ -130,9 +149,13 @@ while IFS= read -r s; do [ -n "$s" ] && pat+=(-e "$s"); done < "$symfile"
               e = p + length(a[i])
               if ((p == 1 || index(WORD, substr(content, p - 1, 1)) == 0) &&
                   (e > length(content) || index(WORD, substr(content, e, 1)) == 0)) {
-                if (!(a[i] in mark) || mark[a[i]] != emitted + 1) {
-                  mark[a[i]] = emitted + 1
+                # Generation key is an explicit per-hunk counter, not `emitted`: `emitted` advances only
+                # on hunks that are actually printed, so a dropped hunk left the generation stale and any
+                # symbol marked during it would have been excluded from owning the NEXT hunk.
+                if (!(a[i] in mark) || mark[a[i]] != hunkno) {
+                  mark[a[i]] = hunkno
                   owners[++nowners] = a[i]
+                  firstline[a[i]] = nb
                 }
               }
             }
@@ -158,4 +181,5 @@ if [ "${body:-0}" -eq 0 ]; then
   exit 4
 fi
 echo "CALLER_SLICES=OK"
-echo "caller_slices: wrote $out: $bytes bytes ($n_sym symbols, $body lines; per symbol <=$cap hunks and <=$maxlines lines; ${ctx} lines of context)"
+echo "caller_slices: wrote $out: $bytes bytes ($n_sym symbols, $body lines; per symbol <=$cap hunks and"
+echo "caller_slices: <=$maxlines lines, EXCEPT that a symbol not yet represented always gets one hunk; ${ctx} lines of context)"

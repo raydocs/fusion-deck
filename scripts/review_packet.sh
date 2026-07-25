@@ -20,13 +20,13 @@ git rev-parse --show-toplevel >/dev/null 2>&1 || { echo "review_packet: not a gi
 
 case "$scope" in
   uncommitted) header="uncommitted working tree (vs HEAD)"
-    log_cmd=(git status --short); stat_cmd=(git diff --stat); diff_cmd=(git diff -U10) ;;
+    log_cmd=(git -c core.quotePath=false status --short); stat_cmd=(git -c core.quotePath=false diff --stat); diff_cmd=(git -c core.quotePath=false diff -U10) ;;
   staged)      header="staged changes (index vs HEAD)"
-    log_cmd=(git status --short); stat_cmd=(git diff --staged --stat); diff_cmd=(git diff --staged -U10) ;;
+    log_cmd=(git -c core.quotePath=false status --short); stat_cmd=(git -c core.quotePath=false diff --staged --stat); diff_cmd=(git -c core.quotePath=false diff --staged -U10) ;;
   back:*)      n="${scope#back:}"
     case "$n" in ''|*[!0-9]*) echo "review_packet: bad back:N '$scope'" >&2; exit 2 ;; esac
     range="HEAD~$n..HEAD"; header="last $n commit(s): $range"
-    log_cmd=(git log --oneline "$range"); stat_cmd=(git diff --stat "$range"); diff_cmd=(git diff -U10 "$range") ;;
+    log_cmd=(git -c core.quotePath=false log --oneline "$range"); stat_cmd=(git -c core.quotePath=false diff --stat "$range"); diff_cmd=(git -c core.quotePath=false diff -U10 "$range") ;;
   *)
     if [[ "$scope" == *..* ]]; then
       range="$scope"; header="range: $range"
@@ -38,7 +38,7 @@ case "$scope" in
       echo "review_packet: unknown scope '$scope'" >&2
       exit 2
     fi
-    log_cmd=(git log --oneline "$range"); stat_cmd=(git diff --stat "$range"); diff_cmd=(git diff -U10 "$range") ;;
+    log_cmd=(git -c core.quotePath=false log --oneline "$range"); stat_cmd=(git -c core.quotePath=false diff --stat "$range"); diff_cmd=(git -c core.quotePath=false diff -U10 "$range") ;;
 esac
 
 # Capture the diff first: an empty diff must be an honest error, not a headers-only packet.

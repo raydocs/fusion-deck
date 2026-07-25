@@ -71,8 +71,9 @@ It takes the symbols the diff **declares**, finds their call-sites in one multi-
 keeps each hit with ±4 lines of surrounding block. Two caps, both per symbol and both disclosed on the
 status line: a **hunk** count and a **line** budget. The line budget is the load-bearing one — `git grep`
 merges nearby matches into a single hunk of unbounded length, so counting hunks alone does not bound the
-packet. Caller *signatures* need no separate step: the repo map above already carries them for every
-tracked source file. Read the greppable `CALLER_SLICES=` line. `NO_SYMBOLS` (docs/config/deletion-only) is
+packet. Caller *signatures* need no separate step: the repo map above carries them for every tracked source file
+it was able to include — check `MAP_STATE`, since a `TRUNCATED` run names over-budget files without
+signatures, and symlinks are excluded outright. Read the greppable `CALLER_SLICES=` line. `NO_SYMBOLS` (docs/config/deletion-only) is
 not permission to ship a context-free packet: fall back to `git diff --stat` plus `codemap.sh` of the
 touched files, and say in the brief that caller context was omitted. `EMPTY` means symbols exist but
 nothing came back — a broken pipeline, exit 4, do not ship it.

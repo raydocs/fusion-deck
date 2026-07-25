@@ -3,6 +3,13 @@
 #
 # Usage: bench_step1.sh <repo> [baseline-ref]
 #
+# WHAT THIS DOES NOT MEASURE. The sandbox is `git archive HEAD` plus untracked files, so it contains no
+# gitignored build output and only a one-commit `.git`. The largest single term in the README's headline —
+# `grep -r` reading a multi-GB `node_modules` and the object store before filtering, 491 s -> 0.9 s — is
+# therefore ABSENT here, and the ratio this prints is a LOWER BOUND on a repo that has such a tree. That
+# figure was measured separately against a real working tree; this script reproduces the script-level
+# improvement without touching the operator's checkout.
+#
 # It NEVER modifies the repo you point it at. An earlier version appended fixture declarations to a
 # tracked file in that repo and then ran `git checkout` on it — which discards any uncommitted edits the
 # operator had in that file. Everything now happens inside a disposable snapshot built by the same helper

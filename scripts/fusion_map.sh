@@ -108,15 +108,21 @@ cache="$cache_root/$repo_key/$tier"
 mkdir -p "$cache" || exit 2
 
 # ── 1. The tracked source inventory, with each file's blob SHA ────────────────────────────────────────
+# core.quotePath=false on EVERY path-producing git call. It defaults to TRUE, which escapes any non-ASCII
+# path as "\344\270\255...py" — quotes included — so the extension test saw `.py"` and dropped the file.
+# A repo with CJK or accented filenames lost them from the map silently.
+#
 # `git ls-files -s` emits "<mode> <sha> <stage>\t<path>". Using git (not find) is the whole point: it sees
 # ONLY tracked files, so gitignored build output (node_modules, Library/, target/) costs nothing — the
 # same reason /fusion-review's caller-context step uses `git grep` rather than `grep -r`.
 # mode 120000 is a SYMLINK. Excluding it here costs nothing — the mode is already in the line we parse —
 # and it keeps the inventory to things codemap can actually read. `git ls-files -d` (which replaced a
 # per-file `[ -f ]` test) does NOT report a broken symlink as deleted, because the link itself exists, so
-# a tracked `broken.py -> nowhere.py` was being counted, listed, and handed to codemap. It also matches
-# the panel snapshot's rule: a link that escapes the repo is a leak, one that stays is redundant.
-( cd "$repo" && git ls-files -s ) \
+# a tracked `broken.py -> nowhere.py` was being counted, listed, and handed to codemap. The untracked
+# inventory below refuses links too; between them they implement the same rule the panel snapshot
+# applies — no symlink, tracked or not — because a link that escapes the repo leaks whatever it points at
+# into an artifact that goes to every external seat.
+( cd "$repo" && git -c core.quotePath=false ls-files -s ) \
   | awk -F'\t' '{ split($1, m, " "); if (m[1] != "120000") print m[2] "\t" $2 }' > "$tmp/index_sha_path"
 
 # The INDEX sha is stale for a file edited but not staged — and `/fusion-review uncommitted` (the most
@@ -124,11 +130,22 @@ mkdir -p "$cache" || exit 2
 # to be the map of what is under review. So re-hash the working-tree content of dirty files, and include
 # untracked-but-not-ignored source files, which `git ls-files` cannot see at all.
 : > "$tmp/rehash_paths"
-( cd "$repo" && git diff --name-only; git ls-files -o --exclude-standard ) 2>/dev/null \
+( cd "$repo" && git -c core.quotePath=false diff --name-only
+  cd "$repo" && git -c core.quotePath=false ls-files -o --exclude-standard ) 2>/dev/null \
   | sort -u > "$tmp/dirty_or_new"
 while IFS= read -r path; do
   [ -n "$path" ] || continue
   fusion_is_source_path "$path" || continue
+  # SYMLINKS ARE REFUSED HERE TOO. Filtering mode 120000 out of the index inventory was only half the
+  # job: this second inventory guards with `[ -f ]`, which FOLLOWS links. An untracked
+  # `src/leak.py -> /outside/secret.py` was therefore hashed, listed and CODEMAPPED into map.md — the
+  # artifact handed verbatim to every external seat. Verified: a function defined outside the repo
+  # appeared in the map. The harmless shape (a broken link) was excluded by `[ -f ]` while the
+  # dangerous one sailed through, which is the wrong way round.
+  if [ -L "$repo/$path" ]; then
+    echo "fusion_map: skipping symlink '$path' — it can resolve outside the repo." >&2
+    continue
+  fi
   [ -f "$repo/$path" ] || continue          # deletions: nothing to hash; they drop out of the map
   printf '%s\n' "$path" >> "$tmp/rehash_paths"
 done < "$tmp/dirty_or_new"
@@ -171,7 +188,7 @@ awk -F'\t' '
 # Checked, not swallowed: an empty `deleted` list is indistinguishable from "nothing was deleted", and
 # it silently restores the exact defect this block exists to prevent — a removed file keeping its
 # file_map entry and a full signature block for functions that no longer exist.
-if ! ( cd "$repo" && git ls-files -d ) 2>"$tmp/del_err" | sort -u > "$tmp/deleted"; then
+if ! ( cd "$repo" && git -c core.quotePath=false ls-files -d ) 2>"$tmp/del_err" | sort -u > "$tmp/deleted"; then
   echo "fusion_map: could not list deleted files; a removed file would keep its stale signatures." >&2
   sed 's/^/fusion_map:   /' "$tmp/del_err" >&2
   echo "MAP_STATE=DELETED_UNKNOWN"

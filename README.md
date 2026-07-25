@@ -5,7 +5,7 @@
 # fusion-deck
 
 <a href="https://github.com/raydocs/fusion-deck/releases/tag/v2.2"><img src="assets/readme/badges/badge-version.svg" alt="Version v2.2" height="22"></a>
-<a href="#development-verification"><img src="assets/readme/badges/badge-smoke.svg" alt="Smoke: 303 passing" height="22"></a>
+<a href="#development-verification"><img src="assets/readme/badges/badge-smoke.svg" alt="Smoke: 307 passing" height="22"></a>
 <img src="assets/readme/badges/badge-panel.svg" alt="Panel: Claude + Codex + Gemini" height="22">
 <img src="assets/readme/badges/badge-deps.svg" alt="Runtime: bash + python3" height="22">
 <a href="LICENSE"><img src="assets/readme/badges/badge-license.svg" alt="License: MIT" height="22"></a>
@@ -46,7 +46,7 @@ A panel costs roughly 3 model calls and a few minutes; it is priced for decision
 
 ## The context layer, measured
 
-A panel is only as good as what its seats can see. Every seat gets the same mechanical repo map, the seats that can be sandboxed get a disposable snapshot of the code under review, and the timeouts stop lying about which knob controls them. All figures below are from this repo's own benchmarks — same run, same 20-symbol diff, `31dbda2` against `v2.2`.
+A panel is only as good as what its seats can see. Every seat gets the same mechanical repo map, the seats that can be sandboxed get a disposable snapshot of the code under review, and the timeouts stop lying about which knob controls them. All figures below are from this repo's own benchmarks — same run, same 20-symbol diff, `31dbda2` against `v2.2`. `scripts/charts/bench_step1.sh` re-runs the Step-1 timings; it works inside a disposable snapshot, which by construction has no gitignored build tree, so what it prints is a lower bound on a repo that has one.
 
 <table>
 <tr>
@@ -77,13 +77,13 @@ A panel is only as good as what its seats can see. Every seat gets the same mech
 </tr>
 </table>
 
-<img src="assets/readme/charts/defect-origin.svg" alt="Tick rows: 22 defects found by the panel, 9 self-inflicted while fixing, 10 found by self-audit" width="52%" align="right">
+<img src="assets/readme/charts/defect-origin.svg" alt="Tick rows: 30 defects found by the panel, 10 self-inflicted while fixing, 10 found by self-audit" width="52%" align="right">
 
-**And the part worth being honest about.** This was built by running `/fusion-review` on itself, pass after pass. The panel caught **22** defects the author missed — a symlink that exfiltrated files from outside the repo, a worktree whose `.git` pointer walked a seat back to the live checkout, and a per-symbol cap that silently dropped a symbol's only call-site whenever it shared a hunk with a busier name. Nine more were introduced *while fixing* the others.
+**And the part worth being honest about.** This was built by running `/fusion-review` on itself, pass after pass. The panel caught **30** defects the author missed — a symlink that exfiltrated files from outside the repo, a worktree whose `.git` pointer walked a seat back to the live checkout, and a per-symbol cap that silently dropped a symbol's only call-site whenever it shared a hunk with a busier name. Nine more were introduced *while fixing* the others.
 
-The sharpest data point is the optimisation pass. Before shipping it the author wrote a 12-case edge-condition suite — spaces in paths, dots in directory names, empty caches, brand-new symbols — and it found **nothing**. The panel then found six real defects in the same code, every one silent: call-sites lost when a symbol starts or ends a line (`index(WORD, "")` returns 1, not 0, on BSD awk), an unbounded packet because `git grep` merges adjacent matches into one hunk, and a false hard-stop whenever the tool ran from a subdirectory.
+The sharpest data point is the optimisation pass. Before shipping it the author wrote a 12-case edge-condition suite — spaces in paths, dots in directory names, empty caches, brand-new symbols — and it found **nothing**. The panel then found six real defects in the same code, every one silent. The remediation for those was reviewed in turn, and the panel found eight more — including a *critical* one the first fix had opened: a symlink filter that closed the harmless shape and left the exfiltrating one, so a file outside the repo had its contents summarised into the artifact handed to every external seat.
 
-The author's tests probed the shapes the author had thought of. That is the failure mode a second reader exists to cover, and it is why the middle bar is not an embarrassment to hide.
+Twice the author declared a defect fixed and the panel showed the fix closed only the reproduction case. Both times the suite was green. The author's tests probe the shapes the author has thought of — that is the failure mode a second reader exists to cover, and it is why the middle bar is not an embarrassment to hide.
 
 <br clear="right">
 
@@ -178,7 +178,7 @@ Cognition/Devin measured that delegation backfires when subtle intent matters �
 ## Development verification
 
 ```bash
-bash scripts/smoke_test.sh                                   # 303 assertions, offline
+bash scripts/smoke_test.sh                                   # 307 assertions, offline
 python3 scripts/route_task.py --check tests/router_cases.yml
 node scripts/charts/gen_readme_charts.js assets/readme/charts # regenerate the README charts
 ```
